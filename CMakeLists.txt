@@ -1,5 +1,5 @@
-project(hexl_example LANGUAGES C CXX)
 cmake_minimum_required(VERSION 3.13)
+project(moai LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 14)
 
 include_directories(include)
@@ -26,7 +26,7 @@ find_package(SEAL 4.1 REQUIRED)
 add_subdirectory(include/source/bootstrapping/common)
 add_subdirectory(include/source/bootstrapping)
 
-add_executable(test test.cpp
+add_executable(moai_seal_reference test.cpp
   ${CMAKE_SOURCE_DIR}/include/source/bootstrapping/Bootstrapper.cpp
   ${CMAKE_SOURCE_DIR}/include/source/bootstrapping/ModularReducer.cpp
   ${CMAKE_SOURCE_DIR}/include/source/bootstrapping/common/Choosemax.cpp
@@ -40,7 +40,7 @@ add_executable(test test.cpp
   ${CMAKE_SOURCE_DIR}/include/source/bootstrapping/common/RemezApp.cpp
 )
 
-target_include_directories(test PUBLIC
+target_include_directories(moai_seal_reference PUBLIC
     /usr/local/include
     /usr/local/include/NTL
     ${CMAKE_SOURCE_DIR}/include
@@ -49,6 +49,16 @@ target_include_directories(test PUBLIC
     ${CMAKE_SOURCE_DIR}/include/source/bootstrapping/common
 )
 
-target_link_libraries(test crypto ntl gmp m pthread SEAL::seal)
+target_link_libraries(moai_seal_reference crypto ntl gmp m pthread SEAL::seal)
 
 file(COPY "${CMAKE_SOURCE_DIR}/data/" DESTINATION "${CMAKE_BINARY_DIR}/")
+
+include(CTest)
+if(BUILD_TESTING)
+  add_test(
+    NAME migration_contract
+    COMMAND ${CMAKE_COMMAND}
+            -DMOAI_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -P ${CMAKE_SOURCE_DIR}/cmake/ValidateMigrationContract.cmake
+  )
+endif()

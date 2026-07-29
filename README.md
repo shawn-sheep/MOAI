@@ -22,7 +22,7 @@ sudo cmake --install build
 cmake -S . -B build
 cd build
 make
-./test
+./moai_seal_reference
 ```
 
 # 3. Test result

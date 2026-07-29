@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "profile_id": "paper_compat",
+  "security_claim": "none",
+  "warning": "Research reproduction parameters only. Do not claim 128-bit security.",
+  "source_backend": "SEAL-4.1-bs",
+  "source_locations": [
+    "include/test/test_full_scheme.hpp:342-389"
+  ],
+  "workload": {
+    "batch_capacity": 256,
+    "sequence_length": 128,
+    "hidden_size": 768,
+    "intermediate_size": 3072,
+    "attention_heads": 12,
+    "head_size": 64,
+    "encoder_layers": 12
+  },
+  "source_ckks": {
+    "log_ring_dimension": 16,
+    "ring_dimension": 65536,
+    "slot_count": 32768,
+    "sparse_slot_count": 32768,
+    "scaling_bits": 46,
+    "initial_modulus_bits": 51,
+    "bootstrap_modulus_bits": 51,
+    "special_prime_bits": 58,
+    "remaining_levels": 20,
+    "bootstrap_levels": 14,
+    "secret_key_hamming_weight": 192,
+    "bootstrap_boundary": 25,
+    "bootstrap_degree": 59,
+    "bootstrap_scale_factor": 2,
+    "bootstrap_inverse_degree": 1
+  },
+  "openfhe_translation": {
+    "status": "pending_m1",
+    "require_native_eval_bootstrap": true,
+    "allow_security_level_not_set": true,
+    "forbid_security_claim": true
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "milestone": "M0",
+  "captured_on": "2026-07-29",
+  "git": {
+    "commit": "8bcb0eadac299db88ca6417c5710cd65ada66af1",
+    "branch_base": "origin/main",
+    "clean_after_authorized_discard": true
+  },
+  "environment": {
+    "os": "WSL2 Linux 6.6.114.1-microsoft-standard-WSL2 x86_64",
+    "cpu": "13th Gen Intel(R) Core(TM) i7-13700K",
+    "visible_cpus": 16,
+    "memory_gib": 78,
+    "compiler": "g++ 13.3.0",
+    "cmake": "3.28.3",
+    "seal": "4.1.2",
+    "openfhe_prefix": "/home/shawnsheep/opt/openfhe_v1_5_1"
+  },
+  "tracked_inputs": {
+    "data_file_count": 470,
+    "data_tree_sha256": "e620feb7611d79b0514ec9e6684f2176a2aa51d2bbd5b6753f65fc9c038a6ecf",
+    "include_file_count": 46,
+    "include_tree_sha256": "92374ae160c4fd582982e711f6a32e77595481a88f499a7b5aef1c966243eb69"
+  },
+  "evidence": {
+    "source_audit": [
+      "basic CKKS, batch packing, Ct-Pt and Ct-Ct test entrypoints exist",
+      "the default source entrypoint calls all_layer_test",
+      "the full path uses sec_level_type::none and passes SecretKey into server-side operators"
+    ],
+    "executed_validation": [],
+    "not_validated": [
+      "clean-tree SEAL executable",
+      "full 12-layer scheme",
+      "server-only trust boundary",
+      "OpenFHE functionality"
+    ]
+  }
+}
