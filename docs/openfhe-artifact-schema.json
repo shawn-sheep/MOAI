@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://local.moai/openfhe-artifact-schema-v2.json",
   "title": "MOAI OpenFHE evidence manifest v2",
-  "description": "Strict schema used for M3 and later evidence. Historical schema_version=1 manifests are immutable legacy records and are not valid against this schema.",
+  "description": "Strict schema-v2 milestone dispatch for M3 and M4 OpenFHE CPU evidence. Historical schema_version=1 manifests remain immutable legacy records; M5 and M6 require a later contract revision.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -35,7 +35,10 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:-]*$"
     },
     "milestone": {
-      "enum": ["M0", "M1", "M2", "M3", "M4", "M5", "M6"]
+      "enum": [
+        "M3",
+        "M4"
+      ]
     },
     "started_at": {
       "$ref": "#/$defs/timestamp"
@@ -46,7 +49,12 @@
     "git": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository_root", "branch", "local_commit", "clean"],
+      "required": [
+        "repository_root",
+        "branch",
+        "local_commit",
+        "clean"
+      ],
       "properties": {
         "repository_root": {
           "type": "string",
@@ -78,7 +86,11 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["command", "cwd", "exit_code"],
+        "required": [
+          "command",
+          "cwd",
+          "exit_code"
+        ],
         "properties": {
           "command": {
             "type": "string",
@@ -93,7 +105,11 @@
             "minimum": 0
           },
           "phase": {
-            "enum": ["pre_commit", "post_commit", "artifact_generation"]
+            "enum": [
+              "pre_commit",
+              "post_commit",
+              "artifact_generation"
+            ]
           },
           "started_at": {
             "$ref": "#/$defs/timestamp"
@@ -247,209 +263,19 @@
       }
     },
     "contracts": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "approximation_config_path",
-        "approximation_config_sha256",
-        "trace_contract_path",
-        "trace_contract_sha256",
-        "profile_config_path",
-        "profile_config_sha256",
-        "softmax_shift",
-        "polynomials",
-        "thresholds"
-      ],
-      "properties": {
-        "approximation_config_path": {
-          "const": "config/openfhe_approximations.json"
-        },
-        "approximation_config_sha256": {
-          "$ref": "#/$defs/sha256"
-        },
-        "trace_contract_path": {
-          "const": "config/moai_trace_channel_scales.json"
-        },
-        "trace_contract_sha256": {
-          "$ref": "#/$defs/sha256"
-        },
-        "profile_config_path": {
-          "const": "config/paper_compat.json"
-        },
-        "profile_config_sha256": {
-          "$ref": "#/$defs/sha256"
-        },
-        "softmax_shift": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["layer", "head", "values_sha256"],
-          "properties": {
-            "layer": {
-              "const": 1
-            },
-            "head": {
-              "const": 2
-            },
-            "values_sha256": {
-              "const": "41ecf6ade53f674096c9afc752ccfe99834876ea4768bcf4bf3ea25a8f502432"
-            }
-          }
-        },
-        "polynomials": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "gelu",
-            "softmax_exponential",
-            "softmax_reciprocal",
-            "layernorm_inverse_sqrt"
-          ],
-          "properties": {
-            "gelu": {
-              "$ref": "#/$defs/m3_gelu_polynomial"
-            },
-            "softmax_exponential": {
-              "$ref": "#/$defs/m3_softmax_exponential_polynomial"
-            },
-            "softmax_reciprocal": {
-              "$ref": "#/$defs/m3_softmax_reciprocal_polynomial"
-            },
-            "layernorm_inverse_sqrt": {
-              "$ref": "#/$defs/m3_layernorm_inverse_sqrt_polynomial"
-            }
-          }
-        },
-        "thresholds": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "relative_l2_max",
-            "cosine_min",
-            "inactive_max_abs",
-            "denominator_post_max_abs"
-          ],
-          "properties": {
-            "relative_l2_max": {
-              "const": 0.01
-            },
-            "cosine_min": {
-              "const": 0.999
-            },
-            "inactive_max_abs": {
-              "const": 0.000001
-            },
-            "denominator_post_max_abs": {
-              "const": 0.000001
-            }
-          }
-        }
-      }
+      "type": "object"
     },
     "metrics": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "repeat_count",
-        "successful_repeats",
-        "elapsed_seconds",
-        "peak_rss_kib_max",
-        "quality",
-        "operation_counts",
-        "max_observed_level_max"
-      ],
-      "properties": {
-        "repeat_count": {
-          "type": "integer",
-          "minimum": 3
-        },
-        "successful_repeats": {
-          "type": "integer",
-          "minimum": 3
-        },
-        "elapsed_seconds": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["minimum", "median", "maximum"],
-          "properties": {
-            "minimum": {
-              "type": "number",
-              "minimum": 0
-            },
-            "median": {
-              "type": "number",
-              "minimum": 0
-            },
-            "maximum": {
-              "type": "number",
-              "minimum": 0
-            }
-          }
-        },
-        "peak_rss_kib_max": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "quality": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "gelu_rel_l2_max",
-            "ffn_rel_l2_max",
-            "softmax_rel_l2_max",
-            "layernorm_rel_l2_max",
-            "gelu_cosine_min",
-            "ffn_cosine_min",
-            "softmax_cosine_min",
-            "layernorm_cosine_min",
-            "inactive_max_abs_max",
-            "denominator_post_max_abs_max"
-          ],
-          "properties": {
-            "gelu_rel_l2_max": {
-              "$ref": "#/$defs/m3_relative_l2"
-            },
-            "ffn_rel_l2_max": {
-              "$ref": "#/$defs/m3_relative_l2"
-            },
-            "softmax_rel_l2_max": {
-              "$ref": "#/$defs/m3_relative_l2"
-            },
-            "layernorm_rel_l2_max": {
-              "$ref": "#/$defs/m3_relative_l2"
-            },
-            "gelu_cosine_min": {
-              "$ref": "#/$defs/m3_cosine"
-            },
-            "ffn_cosine_min": {
-              "$ref": "#/$defs/m3_cosine"
-            },
-            "softmax_cosine_min": {
-              "$ref": "#/$defs/m3_cosine"
-            },
-            "layernorm_cosine_min": {
-              "$ref": "#/$defs/m3_cosine"
-            },
-            "inactive_max_abs_max": {
-              "$ref": "#/$defs/m3_small_error"
-            },
-            "denominator_post_max_abs_max": {
-              "$ref": "#/$defs/m3_small_error"
-            }
-          }
-        },
-        "operation_counts": {
-          "$ref": "#/$defs/m3_operation_counts"
-        },
-        "max_observed_level_max": {
-          "type": "integer",
-          "minimum": 0
-        }
-      }
+      "type": "object"
     },
     "gate": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["passed", "decision", "checks"],
+      "required": [
+        "passed",
+        "decision",
+        "checks"
+      ],
       "properties": {
         "passed": {
           "type": "boolean"
@@ -512,10 +338,53 @@
       }
     },
     "verdict": {
-      "enum": ["GO", "NO-GO", "BLOCKED", "SOURCE_AUDIT_ONLY"]
+      "enum": [
+        "GO",
+        "NO-GO",
+        "BLOCKED",
+        "SOURCE_AUDIT_ONLY"
+      ]
     }
   },
   "$defs": {
+    "m3_profile_binding": {
+      "type": "object",
+      "required": [
+        "source_config_path",
+        "effective_profile_locator",
+        "effective_profile_sha256"
+      ],
+      "properties": {
+        "source_config_path": {
+          "const": "config/paper_compat.json"
+        },
+        "effective_profile_locator": {
+          "const": "/openfhe_translation/m3_smoke_effective_runtime/parameters"
+        },
+        "effective_profile_sha256": {
+          "const": "965ded1a76b064c738f55b87b151df60c605d62eaeaad55f6cc753e149f8af59"
+        }
+      }
+    },
+    "encoder_profile_binding": {
+      "type": "object",
+      "required": [
+        "source_config_path",
+        "effective_profile_locator",
+        "effective_profile_sha256"
+      ],
+      "properties": {
+        "source_config_path": {
+          "const": "config/paper_compat_feature_packed.json"
+        },
+        "effective_profile_locator": {
+          "const": "/effective_profile"
+        },
+        "effective_profile_sha256": {
+          "const": "94f30e628e21f02146ce7ed9820194eabba3820f6e1e17176a31f8c5acf8b0be"
+        }
+      }
+    },
     "m3_gelu_polynomial": {
       "type": "object",
       "additionalProperties": false,
@@ -533,7 +402,10 @@
         "interval": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["minimum", "maximum"],
+          "required": [
+            "minimum",
+            "maximum"
+          ],
           "properties": {
             "minimum": {
               "const": -80.0
@@ -571,7 +443,10 @@
         "interval": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["minimum", "maximum"],
+          "required": [
+            "minimum",
+            "maximum"
+          ],
           "properties": {
             "minimum": {
               "const": -16.0
@@ -609,7 +484,10 @@
         "interval": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["minimum", "maximum"],
+          "required": [
+            "minimum",
+            "maximum"
+          ],
           "properties": {
             "minimum": {
               "const": 0.01
@@ -647,7 +525,10 @@
         "interval": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["minimum", "maximum"],
+          "required": [
+            "minimum",
+            "maximum"
+          ],
           "properties": {
             "minimum": {
               "const": 0.5
@@ -728,7 +609,12 @@
       }
     },
     "gate_status": {
-      "enum": ["PASS", "FAIL", "SKIPPED", "NOT_RUN"]
+      "enum": [
+        "PASS",
+        "FAIL",
+        "SKIPPED",
+        "NOT_RUN"
+      ]
     },
     "sha256": {
       "type": "string",
@@ -750,7 +636,13 @@
     "input_file": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "sha256", "bytes", "media_type", "role"],
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "media_type",
+        "role"
+      ],
       "properties": {
         "path": {
           "$ref": "#/$defs/repository_path"
@@ -767,14 +659,28 @@
           "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"
         },
         "role": {
-          "enum": ["source", "configuration", "dataset", "weights", "trace", "contract", "other"]
+          "enum": [
+            "source",
+            "configuration",
+            "dataset",
+            "weights",
+            "trace",
+            "contract",
+            "other"
+          ]
         }
       }
     },
     "artifact_file": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "sha256", "bytes", "media_type", "role"],
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "media_type",
+        "role"
+      ],
       "properties": {
         "path": {
           "$ref": "#/$defs/repository_path"
@@ -791,9 +697,778 @@
           "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"
         },
         "role": {
-          "enum": ["stdout", "metrics", "checksum", "benchmark", "supporting_evidence", "other"]
+          "enum": [
+            "stdout",
+            "metrics",
+            "checksum",
+            "benchmark",
+            "supporting_evidence",
+            "other"
+          ]
+        }
+      }
+    },
+    "m3_contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approximation_config_path",
+        "approximation_config_sha256",
+        "trace_contract_path",
+        "trace_contract_sha256",
+        "profile_config_path",
+        "profile_config_sha256",
+        "softmax_shift",
+        "polynomials",
+        "thresholds"
+      ],
+      "properties": {
+        "approximation_config_path": {
+          "const": "config/openfhe_approximations.json"
+        },
+        "approximation_config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "trace_contract_path": {
+          "const": "config/moai_trace_channel_scales.json"
+        },
+        "trace_contract_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "profile_config_path": {
+          "const": "config/paper_compat.json"
+        },
+        "profile_config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "softmax_shift": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "layer",
+            "head",
+            "values_sha256"
+          ],
+          "properties": {
+            "layer": {
+              "const": 1
+            },
+            "head": {
+              "const": 2
+            },
+            "values_sha256": {
+              "const": "41ecf6ade53f674096c9afc752ccfe99834876ea4768bcf4bf3ea25a8f502432"
+            }
+          }
+        },
+        "polynomials": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "gelu",
+            "softmax_exponential",
+            "softmax_reciprocal",
+            "layernorm_inverse_sqrt"
+          ],
+          "properties": {
+            "gelu": {
+              "$ref": "#/$defs/m3_gelu_polynomial"
+            },
+            "softmax_exponential": {
+              "$ref": "#/$defs/m3_softmax_exponential_polynomial"
+            },
+            "softmax_reciprocal": {
+              "$ref": "#/$defs/m3_softmax_reciprocal_polynomial"
+            },
+            "layernorm_inverse_sqrt": {
+              "$ref": "#/$defs/m3_layernorm_inverse_sqrt_polynomial"
+            }
+          }
+        },
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "relative_l2_max",
+            "cosine_min",
+            "inactive_max_abs",
+            "denominator_post_max_abs"
+          ],
+          "properties": {
+            "relative_l2_max": {
+              "const": 0.01
+            },
+            "cosine_min": {
+              "const": 0.999
+            },
+            "inactive_max_abs": {
+              "const": 0.000001
+            },
+            "denominator_post_max_abs": {
+              "const": 0.000001
+            }
+          }
+        }
+      }
+    },
+    "m3_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repeat_count",
+        "successful_repeats",
+        "elapsed_seconds",
+        "peak_rss_kib_max",
+        "quality",
+        "operation_counts",
+        "max_observed_level_max"
+      ],
+      "properties": {
+        "repeat_count": {
+          "type": "integer",
+          "minimum": 3
+        },
+        "successful_repeats": {
+          "type": "integer",
+          "minimum": 3
+        },
+        "elapsed_seconds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minimum",
+            "median",
+            "maximum"
+          ],
+          "properties": {
+            "minimum": {
+              "type": "number",
+              "minimum": 0
+            },
+            "median": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maximum": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "peak_rss_kib_max": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "gelu_rel_l2_max",
+            "ffn_rel_l2_max",
+            "softmax_rel_l2_max",
+            "layernorm_rel_l2_max",
+            "gelu_cosine_min",
+            "ffn_cosine_min",
+            "softmax_cosine_min",
+            "layernorm_cosine_min",
+            "inactive_max_abs_max",
+            "denominator_post_max_abs_max"
+          ],
+          "properties": {
+            "gelu_rel_l2_max": {
+              "$ref": "#/$defs/m3_relative_l2"
+            },
+            "ffn_rel_l2_max": {
+              "$ref": "#/$defs/m3_relative_l2"
+            },
+            "softmax_rel_l2_max": {
+              "$ref": "#/$defs/m3_relative_l2"
+            },
+            "layernorm_rel_l2_max": {
+              "$ref": "#/$defs/m3_relative_l2"
+            },
+            "gelu_cosine_min": {
+              "$ref": "#/$defs/m3_cosine"
+            },
+            "ffn_cosine_min": {
+              "$ref": "#/$defs/m3_cosine"
+            },
+            "softmax_cosine_min": {
+              "$ref": "#/$defs/m3_cosine"
+            },
+            "layernorm_cosine_min": {
+              "$ref": "#/$defs/m3_cosine"
+            },
+            "inactive_max_abs_max": {
+              "$ref": "#/$defs/m3_small_error"
+            },
+            "denominator_post_max_abs_max": {
+              "$ref": "#/$defs/m3_small_error"
+            }
+          }
+        },
+        "operation_counts": {
+          "$ref": "#/$defs/m3_operation_counts"
+        },
+        "max_observed_level_max": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "m4_thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relative_l2_max",
+        "cosine_min",
+        "inactive_max_abs"
+      ],
+      "properties": {
+        "relative_l2_max": {
+          "const": 0.01
+        },
+        "cosine_min": {
+          "const": 0.999
+        },
+        "inactive_max_abs": {
+          "const": 0.000001
+        }
+      }
+    },
+    "m4_execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "quality_reference",
+        "encoder_layers",
+        "layer_id",
+        "trace_shape",
+        "feature_block_size",
+        "checkpoint_decryption_owner",
+        "server_private_key_present",
+        "server_decryptions",
+        "server_plaintext_activations",
+        "multiplicative_depth",
+        "max_observed_level",
+        "max_polynomial_depth",
+        "required_checkpoints"
+      ],
+      "properties": {
+        "mode": {
+          "const": "server-only"
+        },
+        "quality_reference": {
+          "const": "config/moai_encoder_trace.json single-layer frozen polynomial oracle"
+        },
+        "trace_shape": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "feature_block_size": {
+          "const": 1024
+        },
+        "checkpoint_decryption_owner": {
+          "const": "client"
+        },
+        "server_private_key_present": {
+          "const": false
+        },
+        "server_decryptions": {
+          "const": 0
+        },
+        "server_plaintext_activations": {
+          "const": false
+        },
+        "multiplicative_depth": {
+          "const": 47
+        },
+        "max_observed_level": {
+          "const": 45
+        },
+        "max_polynomial_depth": {
+          "const": 10
+        },
+        "encoder_layers": {
+          "const": 1
+        },
+        "layer_id": {
+          "const": 1
+        },
+        "required_checkpoints": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "attention_output",
+              "self_layernorm_output",
+              "ffn_output",
+              "encoder_output"
+            ]
+          }
+        }
+      }
+    },
+    "m4_contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approximation_config_path",
+        "approximation_config_sha256",
+        "encoder_trace_contract_path",
+        "encoder_trace_contract_sha256",
+        "profile_config_path",
+        "profile_config_sha256",
+        "execution",
+        "thresholds"
+      ],
+      "properties": {
+        "approximation_config_path": {
+          "const": "config/openfhe_approximations.json"
+        },
+        "approximation_config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "encoder_trace_contract_path": {
+          "const": "config/moai_encoder_trace.json"
+        },
+        "encoder_trace_contract_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "profile_config_path": {
+          "const": "config/paper_compat_feature_packed.json"
+        },
+        "profile_config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "execution": {
+          "$ref": "#/$defs/m4_execution"
+        },
+        "thresholds": {
+          "$ref": "#/$defs/m4_thresholds"
+        }
+      }
+    },
+    "encoder_operation_counts_one_layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rotations",
+        "ct_pt_multiplications",
+        "ct_ct_multiplications",
+        "explicit_rescale_requests",
+        "chebyshev_evaluations",
+        "estimated_polynomial_multiplications",
+        "bootstraps",
+        "bootstrap_iterations"
+      ],
+      "properties": {
+        "rotations": {
+          "const": 6300
+        },
+        "ct_pt_multiplications": {
+          "const": 51865
+        },
+        "ct_ct_multiplications": {
+          "const": 95
+        },
+        "explicit_rescale_requests": {
+          "const": 800
+        },
+        "chebyshev_evaluations": {
+          "const": 55
+        },
+        "estimated_polynomial_multiplications": {
+          "const": 1150
+        },
+        "bootstraps": {
+          "const": 25
+        },
+        "bootstrap_iterations": {
+          "const": 50
+        }
+      }
+    },
+    "m4_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relative_l2_max",
+        "cosine_min",
+        "inactive_max_abs_max"
+      ],
+      "properties": {
+        "relative_l2_max": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.01
+        },
+        "cosine_min": {
+          "type": "number",
+          "minimum": 0.999,
+          "maximum": 1.000000000001
+        },
+        "inactive_max_abs_max": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.000001
+        }
+      }
+    },
+    "m4_checkpoint_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "level_min",
+        "level_max",
+        "noise_scale_degree_min",
+        "noise_scale_degree_max",
+        "remaining_levels_min",
+        "remaining_levels_max",
+        "scale_bits_min",
+        "scale_bits_max",
+        "ciphertext_count",
+        "decryption_owner"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "attention_output",
+            "self_layernorm_output",
+            "ffn_output",
+            "encoder_output"
+          ]
+        },
+        "level_min": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "level_max": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "noise_scale_degree_min": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "noise_scale_degree_max": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "remaining_levels_min": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "remaining_levels_max": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scale_bits_min": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "scale_bits_max": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "ciphertext_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "decryption_owner": {
+          "const": "client"
+        }
+      }
+    },
+    "latency_summary_ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum",
+        "median",
+        "maximum"
+      ],
+      "properties": {
+        "minimum": {
+          "type": "number",
+          "minimum": 0
+        },
+        "median": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximum": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "m4_phase_latency_ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_load_ms",
+        "setup_keygen_ms",
+        "client_encrypt_ms",
+        "server_online_ms",
+        "client_decrypt_validate_ms"
+      ],
+      "properties": {
+        "fixture_load_ms": {
+          "$ref": "#/$defs/latency_summary_ms"
+        },
+        "setup_keygen_ms": {
+          "$ref": "#/$defs/latency_summary_ms"
+        },
+        "client_encrypt_ms": {
+          "$ref": "#/$defs/latency_summary_ms"
+        },
+        "server_online_ms": {
+          "$ref": "#/$defs/latency_summary_ms"
+        },
+        "client_decrypt_validate_ms": {
+          "$ref": "#/$defs/latency_summary_ms"
+        }
+      }
+    },
+    "m4_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repeat_count",
+        "successful_repeats",
+        "warmup_count",
+        "elapsed_seconds",
+        "tokens_per_batch",
+        "phase_latency_ms",
+        "batch_total_ms",
+        "batch_amortized_ms_per_token",
+        "server_amortized_ms_per_token",
+        "peak_rss_kib_max",
+        "actual_trace_shape",
+        "actual_trace_value_count",
+        "feature_block_size",
+        "input_level",
+        "output_level",
+        "remaining_levels",
+        "multiplicative_depth",
+        "max_observed_level",
+        "max_polynomial_depth",
+        "quality",
+        "checkpoints",
+        "checkpoint_metadata_sha256",
+        "operation_counts"
+      ],
+      "properties": {
+        "repeat_count": {
+          "const": 5
+        },
+        "successful_repeats": {
+          "const": 5
+        },
+        "warmup_count": {
+          "const": 1
+        },
+        "elapsed_seconds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minimum",
+            "median",
+            "maximum"
+          ],
+          "properties": {
+            "minimum": {
+              "type": "number",
+              "minimum": 0
+            },
+            "median": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maximum": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "tokens_per_batch": {
+          "const": 5
+        },
+        "phase_latency_ms": {
+          "$ref": "#/$defs/m4_phase_latency_ms"
+        },
+        "batch_total_ms": {
+          "$ref": "#/$defs/latency_summary_ms"
+        },
+        "batch_amortized_ms_per_token": {
+          "$ref": "#/$defs/latency_summary_ms"
+        },
+        "server_amortized_ms_per_token": {
+          "$ref": "#/$defs/latency_summary_ms"
+        },
+        "peak_rss_kib_max": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "actual_trace_shape": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "actual_trace_value_count": {
+          "const": 3840
+        },
+        "feature_block_size": {
+          "const": 1024
+        },
+        "input_level": {
+          "const": 29
+        },
+        "output_level": {
+          "const": 29
+        },
+        "remaining_levels": {
+          "const": 17
+        },
+        "multiplicative_depth": {
+          "const": 47
+        },
+        "max_observed_level": {
+          "const": 45
+        },
+        "max_polynomial_depth": {
+          "const": 10
+        },
+        "quality": {
+          "$ref": "#/$defs/m4_quality"
+        },
+        "checkpoints": {
+          "const": [
+            {
+              "name": "attention_output",
+              "level_min": 40,
+              "level_max": 40,
+              "noise_scale_degree_min": 2,
+              "noise_scale_degree_max": 2,
+              "remaining_levels_min": 6,
+              "remaining_levels_max": 6,
+              "scale_bits_min": 100,
+              "scale_bits_max": 100,
+              "ciphertext_count": 5,
+              "decryption_owner": "client"
+            },
+            {
+              "name": "self_layernorm_output",
+              "level_min": 32,
+              "level_max": 32,
+              "noise_scale_degree_min": 2,
+              "noise_scale_degree_max": 2,
+              "remaining_levels_min": 14,
+              "remaining_levels_max": 14,
+              "scale_bits_min": 100,
+              "scale_bits_max": 100,
+              "ciphertext_count": 5,
+              "decryption_owner": "client"
+            },
+            {
+              "name": "ffn_output",
+              "level_min": 45,
+              "level_max": 45,
+              "noise_scale_degree_min": 2,
+              "noise_scale_degree_max": 2,
+              "remaining_levels_min": 1,
+              "remaining_levels_max": 1,
+              "scale_bits_min": 100,
+              "scale_bits_max": 100,
+              "ciphertext_count": 5,
+              "decryption_owner": "client"
+            },
+            {
+              "name": "encoder_output",
+              "level_min": 29,
+              "level_max": 29,
+              "noise_scale_degree_min": 2,
+              "noise_scale_degree_max": 2,
+              "remaining_levels_min": 17,
+              "remaining_levels_max": 17,
+              "scale_bits_min": 100,
+              "scale_bits_max": 100,
+              "ciphertext_count": 5,
+              "decryption_owner": "client"
+            }
+          ]
+        },
+        "checkpoint_metadata_sha256": {
+          "const": "c4c1c85e52154215784b9fa93a584d824dde94a644e5af997882486aac01a6db"
+        },
+        "operation_counts": {
+          "$ref": "#/$defs/encoder_operation_counts_one_layer"
         }
       }
     }
-  }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "milestone",
+        "profile",
+        "contracts",
+        "metrics"
+      ],
+      "properties": {
+        "milestone": {
+          "const": "M3"
+        },
+        "profile": {
+          "$ref": "#/$defs/m3_profile_binding"
+        },
+        "contracts": {
+          "$ref": "#/$defs/m3_contracts"
+        },
+        "metrics": {
+          "$ref": "#/$defs/m3_metrics"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "milestone",
+        "profile",
+        "contracts",
+        "metrics"
+      ],
+      "properties": {
+        "milestone": {
+          "const": "M4"
+        },
+        "profile": {
+          "$ref": "#/$defs/encoder_profile_binding"
+        },
+        "contracts": {
+          "$ref": "#/$defs/m4_contracts"
+        },
+        "metrics": {
+          "$ref": "#/$defs/m4_metrics"
+        }
+      }
+    }
+  ]
 }

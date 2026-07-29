@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,7 @@ namespace moai::openfhe {
 
 class ClientRuntime;
 class ServerRuntime;
+class ServerKeyBundleTestAccess;
 
 enum class PackingLayout {
     kContiguous,
@@ -91,18 +93,24 @@ struct ApproximationContract {
     std::vector<double> coefficients;
 };
 
+// Same-process transfer object.  EvalKey handles are copied by value here and
+// deliberately are not a cross-process serialization format.
 class ServerKeyBundle {
 private:
     friend class ClientRuntime;
     friend class ServerRuntime;
+    friend class ServerKeyBundleTestAccess;
 
     lbcrypto::CryptoContext<lbcrypto::DCRTPoly> context;
     lbcrypto::PublicKey<lbcrypto::DCRTPoly> public_key;
     std::string key_tag;
     std::string profile_parameter_sha256;
     std::vector<int32_t> rotation_indices;
-    bool has_multiplication_key{false};
-    bool has_bootstrap_key{false};
+    std::vector<lbcrypto::EvalKey<lbcrypto::DCRTPoly>>
+        multiplication_eval_keys;
+    std::map<uint32_t, lbcrypto::EvalKey<lbcrypto::DCRTPoly>>
+        automorphism_eval_keys;
+    std::vector<uint32_t> bootstrap_required_indices;
 };
 
 struct RunMetrics {
@@ -115,6 +123,9 @@ struct RunMetrics {
     uint64_t rotations{0};
     uint64_t ct_pt_multiplications{0};
     uint64_t ct_ct_multiplications{0};
+    // Number of explicit ServerRuntime::Rescale API requests. With the frozen
+    // FLEXIBLEAUTO scaling technique these are not physical modulus-reduction
+    // counts; OpenFHE performs automatic level/scale alignment internally.
     uint64_t rescale_operations{0};
     uint64_t bootstraps{0};
     uint64_t bootstrap_iterations{0};

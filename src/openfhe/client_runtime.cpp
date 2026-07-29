@@ -1,14 +1,18 @@
 #include "moai/openfhe/client_runtime.hpp"
 
 #include "moai/openfhe/context_factory.hpp"
+#include "moai/openfhe/evaluation_key_registry.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 #include <stdexcept>
 #include <utility>
 
 namespace moai::openfhe {
 namespace {
+
+using ContextImpl = lbcrypto::CryptoContextImpl<lbcrypto::DCRTPoly>;
 
 bool ScalesMatch(double lhs, double rhs) {
     if (!std::isfinite(lhs) || !std::isfinite(rhs) || lhs <= 0.0 || rhs <= 0.0) {
@@ -40,6 +44,16 @@ void RefreshPackingMetadata(CipherTensor& tensor) {
     }
 }
 
+void ClearEvaluationKeysForTag(const std::string& key_tag) {
+    ContextImpl::ClearEvalMultKeys(key_tag);
+    ContextImpl::ClearEvalAutomorphismKeys(key_tag);
+}
+
+bool RegistryContainsTag(const std::string& key_tag) {
+    return ContextImpl::GetAllEvalMultKeys().count(key_tag) != 0 ||
+        ContextImpl::GetAllEvalAutomorphismKeys().count(key_tag) != 0;
+}
+
 }  // namespace
 
 ClientRuntime::ClientRuntime(CryptoProfile profile)
@@ -61,21 +75,97 @@ void ClientRuntime::GenerateEvaluationKeys(
     if (!keys_generated_) {
         throw std::logic_error("client keys have not been generated");
     }
-    context_->EvalMultKeyGen(private_key_);
-    multiplication_key_generated_ = true;
-    if (!rotation_indices.empty()) {
-        context_->EvalRotateKeyGen(private_key_, rotation_indices);
-        rotation_indices_ = rotation_indices;
-    }
     if (include_bootstrap_keys) {
         if (!profile_.bootstrap_enabled) {
             throw std::invalid_argument(
                 "bootstrap keys requested for a non-bootstrap profile");
         }
-        context_->EvalBootstrapKeyGen(
-            private_key_,
-            profile_.bootstrap_slots);
-        bootstrap_key_generated_ = true;
+    }
+
+    auto canonical_rotations = rotation_indices;
+    std::sort(canonical_rotations.begin(), canonical_rotations.end());
+    canonical_rotations.erase(
+        std::unique(canonical_rotations.begin(), canonical_rotations.end()),
+        canonical_rotations.end());
+
+    std::unique_lock registry_lock(EvaluationKeyRegistryMutex());
+    const std::string key_tag = public_key_->GetKeyTag();
+    if (key_tag.empty() || private_key_->GetKeyTag() != key_tag) {
+        throw std::logic_error("client public/private key tags do not match");
+    }
+    if (RegistryContainsTag(key_tag)) {
+        throw std::logic_error(
+            "evaluation-key registry already contains the client key tag");
+    }
+
+    evaluation_keys_generated_ = false;
+    rotation_indices_.clear();
+    multiplication_eval_keys_.clear();
+    automorphism_eval_keys_.clear();
+    bootstrap_required_indices_.clear();
+    try {
+        context_->EvalMultKeyGen(private_key_);
+        multiplication_eval_keys_ =
+            ContextImpl::GetEvalMultKeyVector(key_tag);
+        if (multiplication_eval_keys_.empty()) {
+            throw std::runtime_error(
+                "OpenFHE generated an empty multiplication-key vector");
+        }
+
+        std::map<uint32_t, lbcrypto::EvalKey<lbcrypto::DCRTPoly>>
+            rotation_eval_keys;
+        if (!canonical_rotations.empty()) {
+            context_->EvalRotateKeyGen(private_key_, canonical_rotations);
+            const auto rotation_map =
+                ContextImpl::GetEvalAutomorphismKeyMapPtr(key_tag);
+            if (!rotation_map || rotation_map->empty()) {
+                throw std::runtime_error(
+                    "OpenFHE generated an empty rotation-key map");
+            }
+            rotation_eval_keys = *rotation_map;
+            ContextImpl::ClearEvalAutomorphismKeys(key_tag);
+        }
+
+        std::map<uint32_t, lbcrypto::EvalKey<lbcrypto::DCRTPoly>>
+            bootstrap_eval_keys;
+        if (include_bootstrap_keys) {
+            context_->EvalBootstrapKeyGen(
+                private_key_,
+                profile_.bootstrap_slots);
+            const auto bootstrap_map =
+                ContextImpl::GetEvalAutomorphismKeyMapPtr(key_tag);
+            if (!bootstrap_map || bootstrap_map->empty()) {
+                throw std::runtime_error(
+                    "OpenFHE generated an empty bootstrap-key map");
+            }
+            bootstrap_eval_keys = *bootstrap_map;
+            bootstrap_required_indices_.reserve(
+                bootstrap_eval_keys.size());
+            for (const auto& [index, key] : bootstrap_eval_keys) {
+                if (!key) {
+                    throw std::runtime_error(
+                        "OpenFHE generated a null bootstrap key");
+                }
+                bootstrap_required_indices_.push_back(index);
+            }
+            ContextImpl::ClearEvalAutomorphismKeys(key_tag);
+        }
+
+        automorphism_eval_keys_ = std::move(rotation_eval_keys);
+        for (auto& [index, key] : bootstrap_eval_keys) {
+            automorphism_eval_keys_.try_emplace(index, std::move(key));
+        }
+        rotation_indices_ = std::move(canonical_rotations);
+        ClearEvaluationKeysForTag(key_tag);
+        evaluation_keys_generated_ = true;
+    }
+    catch (...) {
+        ClearEvaluationKeysForTag(key_tag);
+        rotation_indices_.clear();
+        multiplication_eval_keys_.clear();
+        automorphism_eval_keys_.clear();
+        bootstrap_required_indices_.clear();
+        throw;
     }
 }
 
@@ -155,7 +245,8 @@ std::vector<std::vector<double>> ClientRuntime::Decrypt(
 }
 
 ServerKeyBundle ClientRuntime::ExportServerKeyBundle() const {
-    if (!keys_generated_ || !multiplication_key_generated_) {
+    if (!keys_generated_ || !evaluation_keys_generated_ ||
+        multiplication_eval_keys_.empty()) {
         throw std::logic_error(
             "evaluation keys must be generated before exporting the server bundle");
     }
@@ -165,8 +256,9 @@ ServerKeyBundle ClientRuntime::ExportServerKeyBundle() const {
     bundle.key_tag = public_key_->GetKeyTag();
     bundle.profile_parameter_sha256 = profile_.parameter_sha256;
     bundle.rotation_indices = rotation_indices_;
-    bundle.has_multiplication_key = multiplication_key_generated_;
-    bundle.has_bootstrap_key = bootstrap_key_generated_;
+    bundle.multiplication_eval_keys = multiplication_eval_keys_;
+    bundle.automorphism_eval_keys = automorphism_eval_keys_;
+    bundle.bootstrap_required_indices = bootstrap_required_indices_;
     return bundle;
 }
 

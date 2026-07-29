@@ -40,10 +40,22 @@ public:
         const CipherTensor& input,
         const std::vector<std::vector<double>>& plaintexts);
     [[nodiscard]] CipherTensor Sum(const CipherTensor& input);
+    [[nodiscard]] CipherTensor SumSlots(const CipherTensor& input);
     [[nodiscard]] CipherTensor Rescale(const CipherTensor& input);
 
     [[nodiscard]] uint32_t RemainingLevels(
         const CipherTensor& input) const;
+    void RequireUsableLevels(
+        const CipherTensor& input,
+        uint32_t required_levels,
+        const std::string& operation) const;
+
+    // Read-only, fail-closed preflight for composite server graphs.  Every
+    // required logical rotation must be declared and backed by its exact
+    // automorphism key; native bootstrap capability is checked when requested.
+    void RequireEvaluationKeys(
+        const std::vector<int32_t>& required_rotations,
+        bool require_bootstrap) const;
 
     void PrepareBootstrap();
     [[nodiscard]] CipherTensor Bootstrap(const CipherTensor& input);
@@ -58,11 +70,6 @@ private:
     [[nodiscard]] CipherTensor EvaluateChebyshev(
         const CipherTensor& input,
         const ApproximationContract& contract);
-    void RequireUsableLevels(
-        const CipherTensor& input,
-        uint32_t required_levels,
-        const std::string& operation) const;
-
     ServerKeyBundle key_bundle_;
     lbcrypto::CryptoContext<lbcrypto::DCRTPoly> context_;
     CryptoProfile profile_;

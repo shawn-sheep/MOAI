@@ -49,6 +49,7 @@ target_link_libraries(moai_openfhe_vendor INTERFACE
 add_library(moai_openfhe_common STATIC
   src/openfhe/approximation_registry.cpp
   src/openfhe/context_factory.cpp
+  src/openfhe/evaluation_key_registry.cpp
   src/openfhe/packing.cpp
 )
 target_include_directories(moai_openfhe_common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -58,7 +59,10 @@ add_library(moai::openfhe_common ALIAS moai_openfhe_common)
 add_library(moai_openfhe_server STATIC
   src/openfhe/server_runtime.cpp
   src/openfhe/linear_ops.cpp
+  src/openfhe/feature_packed_ops.cpp
+  src/openfhe/feature_packed_attention.cpp
   src/openfhe/nonlinear_ops.cpp
+  src/openfhe/encoder_layer.cpp
 )
 target_include_directories(moai_openfhe_server PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(moai_openfhe_server PUBLIC moai_openfhe_common)
@@ -95,6 +99,24 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+  set(
+    MOAI_SERVER_LINKED_SOURCE_MANIFEST
+    "${CMAKE_CURRENT_BINARY_DIR}/moai-server-linked-sources.txt"
+  )
+  set(
+    MOAI_SERVER_OPERATOR_SOURCE_MANIFEST
+    "${CMAKE_CURRENT_BINARY_DIR}/moai-server-operator-sources.txt"
+  )
+  file(GENERATE
+    OUTPUT "${MOAI_SERVER_LINKED_SOURCE_MANIFEST}"
+    CONTENT
+      "$<JOIN:$<TARGET_PROPERTY:moai_openfhe_common,SOURCES>,\n>\n$<JOIN:$<TARGET_PROPERTY:moai_openfhe_server,SOURCES>,\n>\n"
+  )
+  file(GENERATE
+    OUTPUT "${MOAI_SERVER_OPERATOR_SOURCE_MANIFEST}"
+    CONTENT "$<JOIN:$<TARGET_PROPERTY:moai_openfhe_server,SOURCES>,\n>\n"
+  )
+
   if(NOT MOAI_PYTHON_EXECUTABLE)
     set(
       _MOAI_PREFERRED_PYTHON
@@ -144,6 +166,8 @@ if(BUILD_TESTING)
     NAME openfhe_server_trust_boundary
     COMMAND ${CMAKE_COMMAND}
             -DMOAI_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+            -DMOAI_SERVER_LINKED_SOURCE_MANIFEST=${MOAI_SERVER_LINKED_SOURCE_MANIFEST}
+            -DMOAI_SERVER_OPERATOR_SOURCE_MANIFEST=${MOAI_SERVER_OPERATOR_SOURCE_MANIFEST}
             -P ${CMAKE_SOURCE_DIR}/cmake/ValidateServerBoundary.cmake
   )
   add_test(
@@ -163,9 +187,21 @@ if(BUILD_TESTING)
     COMMAND "${MOAI_PYTHON_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/scripts/validate_openfhe_profile.py"
             --config "${CMAKE_SOURCE_DIR}/config/paper_compat.json"
+            --feature-config
+            "${CMAKE_SOURCE_DIR}/config/paper_compat_feature_packed.json"
   )
   set_tests_properties(openfhe_profile_contract PROPERTIES
-    LABELS "m3;plaintext;profile"
+    LABELS "m3;m4;plaintext;profile"
+    TIMEOUT 60
+  )
+
+  add_test(
+    NAME openfhe_profile_validator_contract
+    COMMAND "${MOAI_PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/tests/test_validate_openfhe_profile.py"
+  )
+  set_tests_properties(openfhe_profile_validator_contract PROPERTIES
+    LABELS "m4;plaintext;profile"
     TIMEOUT 60
   )
 
@@ -176,7 +212,7 @@ if(BUILD_TESTING)
             --schema "${CMAKE_SOURCE_DIR}/docs/openfhe-artifact-schema.json"
   )
   set_tests_properties(openfhe_artifact_schema_contract PROPERTIES
-    LABELS "m3;plaintext;artifact"
+    LABELS "m3;m4;plaintext;artifact"
     TIMEOUT 60
   )
 
@@ -186,7 +222,17 @@ if(BUILD_TESTING)
             "${CMAKE_SOURCE_DIR}/tests/test_validate_openfhe_artifact.py"
   )
   set_tests_properties(openfhe_artifact_validator_contract PROPERTIES
-    LABELS "m3;plaintext;artifact"
+    LABELS "m3;m4;plaintext;artifact"
+    TIMEOUT 60
+  )
+
+  add_test(
+    NAME openfhe_encoder_artifact_runner_contract
+    COMMAND "${MOAI_PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/tests/test_run_openfhe_encoder_artifact.py"
+  )
+  set_tests_properties(openfhe_encoder_artifact_runner_contract PROPERTIES
+    LABELS "m4;plaintext;artifact"
     TIMEOUT 60
   )
 
@@ -199,6 +245,28 @@ if(BUILD_TESTING)
   )
   set_tests_properties(moai_trace_contract PROPERTIES
     LABELS "m3;plaintext;trace;slow"
+    TIMEOUT 900
+  )
+
+  add_test(
+    NAME openfhe_encoder_trace_contract
+    COMMAND "${MOAI_PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/scripts/validate_openfhe_encoder_trace.py"
+            --data-root "${MOAI_TRACE_DATA_ROOT}"
+            --manifest "${CMAKE_SOURCE_DIR}/config/moai_encoder_trace.json"
+  )
+  set_tests_properties(openfhe_encoder_trace_contract PROPERTIES
+    LABELS "m4;prerequisite;plaintext;trace;slow"
+    TIMEOUT 900
+  )
+
+  add_test(
+    NAME openfhe_encoder_trace_validator_contract
+    COMMAND "${MOAI_PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/tests/test_validate_openfhe_encoder_trace.py"
+  )
+  set_tests_properties(openfhe_encoder_trace_validator_contract PROPERTIES
+    LABELS "m4;prerequisite;plaintext;trace;slow"
     TIMEOUT 900
   )
 
@@ -238,6 +306,129 @@ if(BUILD_TESTING)
     TIMEOUT 300
   )
 
+  add_executable(
+    openfhe_feature_packed_smoke
+    tests/openfhe_feature_packed_smoke.cpp
+  )
+  target_link_libraries(openfhe_feature_packed_smoke PRIVATE
+    moai::openfhe_client
+    moai::openfhe_server
+  )
+  set_target_properties(
+    openfhe_feature_packed_smoke
+    PROPERTIES BUILD_RPATH "${OpenFHE_LIBDIR}"
+  )
+  target_link_options(
+    openfhe_feature_packed_smoke
+    PRIVATE "-Wl,--disable-new-dtags"
+  )
+  add_test(
+    NAME openfhe_feature_packed_smoke
+    COMMAND openfhe_feature_packed_smoke
+  )
+  set_tests_properties(openfhe_feature_packed_smoke PROPERTIES
+    LABELS "openfhe;fast;m4;feature-packed;linear"
+    TIMEOUT 300
+  )
+
+  add_executable(
+    openfhe_feature_packed_attention_smoke
+    tests/openfhe_feature_packed_attention_smoke.cpp
+  )
+  target_link_libraries(openfhe_feature_packed_attention_smoke PRIVATE
+    moai::openfhe_client
+    moai::openfhe_server
+  )
+  set_target_properties(
+    openfhe_feature_packed_attention_smoke
+    PROPERTIES BUILD_RPATH "${OpenFHE_LIBDIR}"
+  )
+  target_link_options(
+    openfhe_feature_packed_attention_smoke
+    PRIVATE "-Wl,--disable-new-dtags"
+  )
+  add_test(
+    NAME openfhe_feature_packed_attention_smoke
+    COMMAND openfhe_feature_packed_attention_smoke
+  )
+  set_tests_properties(openfhe_feature_packed_attention_smoke PROPERTIES
+    LABELS "openfhe;slow;m4;feature-packed;attention;bootstrap"
+    TIMEOUT 1800
+  )
+
+  add_executable(
+    openfhe_encoder_layer_smoke
+    tests/openfhe_encoder_layer_smoke.cpp
+    tests/support/moai_encoder_fixture.cpp
+    tests/support/moai_encoder_plaintext_oracle.cpp
+  )
+  target_include_directories(openfhe_encoder_layer_smoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+  )
+  target_link_libraries(openfhe_encoder_layer_smoke PRIVATE
+    moai::openfhe_client
+    moai::openfhe_server
+  )
+  set_target_properties(
+    openfhe_encoder_layer_smoke
+    PROPERTIES BUILD_RPATH "${OpenFHE_LIBDIR}"
+  )
+  target_link_options(
+    openfhe_encoder_layer_smoke
+    PRIVATE "-Wl,--disable-new-dtags"
+  )
+  add_test(
+    NAME openfhe_encoder_layer_smoke
+    COMMAND openfhe_encoder_layer_smoke
+            --data-root "${MOAI_TRACE_DATA_ROOT}"
+            --layer 1
+            --input-level 29
+  )
+  set_tests_properties(openfhe_encoder_layer_smoke PROPERTIES
+    LABELS "openfhe;slow;m4;encoder;server-only;trace"
+    TIMEOUT 7200
+  )
+  add_test(
+    NAME openfhe_encoder_fixture_contract
+    COMMAND openfhe_encoder_layer_smoke
+            --data-root "${MOAI_TRACE_DATA_ROOT}"
+            --preflight-only
+  )
+  set_tests_properties(openfhe_encoder_fixture_contract PROPERTIES
+    LABELS "plaintext;fast;m4;encoder;trace"
+    TIMEOUT 300
+  )
+
+  add_executable(
+    openfhe_encoder_plaintext_oracle_smoke
+    tests/openfhe_encoder_plaintext_oracle_smoke.cpp
+    tests/support/moai_encoder_fixture.cpp
+    tests/support/moai_encoder_plaintext_oracle.cpp
+  )
+  target_include_directories(openfhe_encoder_plaintext_oracle_smoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+  )
+  target_link_libraries(openfhe_encoder_plaintext_oracle_smoke PRIVATE
+    moai::openfhe_common
+  )
+  set_target_properties(
+    openfhe_encoder_plaintext_oracle_smoke
+    PROPERTIES BUILD_RPATH "${OpenFHE_LIBDIR}"
+  )
+  target_link_options(
+    openfhe_encoder_plaintext_oracle_smoke
+    PRIVATE "-Wl,--disable-new-dtags"
+  )
+  add_test(
+    NAME openfhe_encoder_plaintext_oracle_smoke
+    COMMAND openfhe_encoder_plaintext_oracle_smoke
+            --data-root "${MOAI_TRACE_DATA_ROOT}"
+  )
+  set_tests_properties(openfhe_encoder_plaintext_oracle_smoke PROPERTIES
+    LABELS "plaintext;fast;m4;encoder;oracle;trace"
+    TIMEOUT 300
+  )
+
   add_executable(openfhe_bootstrap_smoke tests/openfhe_bootstrap_smoke.cpp)
   target_link_libraries(openfhe_bootstrap_smoke PRIVATE
     moai::openfhe_client
@@ -248,6 +439,32 @@ if(BUILD_TESTING)
   add_test(NAME openfhe_bootstrap_smoke COMMAND openfhe_bootstrap_smoke)
   set_tests_properties(openfhe_bootstrap_smoke PROPERTIES
     LABELS "openfhe;slow;bootstrap"
+    TIMEOUT 900
+  )
+
+  add_executable(
+    openfhe_evaluation_key_bundle_smoke
+    tests/openfhe_evaluation_key_bundle_smoke.cpp
+  )
+  target_link_libraries(openfhe_evaluation_key_bundle_smoke PRIVATE
+    moai::openfhe_client
+    moai::openfhe_server
+  )
+  set_target_properties(
+    openfhe_evaluation_key_bundle_smoke
+    PROPERTIES BUILD_RPATH "${OpenFHE_LIBDIR}"
+  )
+  target_link_options(
+    openfhe_evaluation_key_bundle_smoke
+    PRIVATE "-Wl,--disable-new-dtags"
+  )
+  add_test(
+    NAME openfhe_evaluation_key_bundle_smoke
+    COMMAND openfhe_evaluation_key_bundle_smoke
+  )
+  set_tests_properties(openfhe_evaluation_key_bundle_smoke PROPERTIES
+    LABELS "openfhe;slow;bootstrap;m4;evaluation-keys;server-only"
+    RUN_SERIAL TRUE
     TIMEOUT 900
   )
 
@@ -267,6 +484,31 @@ if(BUILD_TESTING)
   add_test(NAME openfhe_nonlinear_smoke COMMAND openfhe_nonlinear_smoke)
   set_tests_properties(openfhe_nonlinear_smoke PROPERTIES
     LABELS "openfhe;slow;bootstrap;m3;nonlinear"
+    TIMEOUT 1800
+  )
+
+  add_executable(
+    openfhe_feature_bootstrap_smoke
+    tests/openfhe_feature_bootstrap_smoke.cpp
+  )
+  target_link_libraries(openfhe_feature_bootstrap_smoke PRIVATE
+    moai::openfhe_client
+    moai::openfhe_server
+  )
+  set_target_properties(
+    openfhe_feature_bootstrap_smoke
+    PROPERTIES BUILD_RPATH "${OpenFHE_LIBDIR}"
+  )
+  target_link_options(
+    openfhe_feature_bootstrap_smoke
+    PRIVATE "-Wl,--disable-new-dtags"
+  )
+  add_test(
+    NAME openfhe_feature_bootstrap_smoke
+    COMMAND openfhe_feature_bootstrap_smoke
+  )
+  set_tests_properties(openfhe_feature_bootstrap_smoke PROPERTIES
+    LABELS "m4;openfhe;bootstrap;slow"
     TIMEOUT 1800
   )
 endif()

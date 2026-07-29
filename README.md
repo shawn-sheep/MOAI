@@ -2,10 +2,12 @@
 
 ## OpenFHE CPU migration
 
-The default build is the staged OpenFHE v1.5.1 CPU migration. It currently provides the
-M3 client/server runtime boundary, full 32768-slot interleaved packing for 256 distinct
-lanes, OpenFHE column/diagonal linear kernels, and contract-gated nonlinear operators.
-The only accepted parameter profile
+The default build is the staged OpenFHE v1.5.1 CPU migration. It currently provides an
+M4 server-only replay of layer 1 from the frozen five-token BERT-base encoder trace, in
+addition to the M1-M3 client/server runtime, packing, linear-kernel, nonlinear, and
+native-bootstrap gates. Each token uses one 1024-slot ciphertext. The client owns the
+private key and decrypts the gated checkpoints; the server receives only ciphertexts,
+public model weights, and an evaluation-key bundle. The only accepted parameter profile
 is `paper_compat`, which always reports `security_claim=none`. These research
 reproduction parameters do not support a 128-bit security claim.
 
@@ -66,6 +68,32 @@ explicit test-only 8-slot encoding. It is not a 32768-slot workload result:
 ```bash
 ctest --test-dir build-openfhe --output-on-failure -R openfhe_bootstrap_smoke
 ```
+
+The M4 full-layer correctness gate replays only layer 1 of the fixed five-token trace.
+It validates raw and bootstrap-cleaned attention checkpoints, both LayerNorm sites, the
+three-block FFN, the final polynomial-oracle output, inactive slots, exact operation
+counts, and level/scale metadata. The server target contains no private key, decryptor,
+or plaintext activation path:
+
+```bash
+ctest --test-dir build-openfhe --output-on-failure \
+  -R 'openfhe_(profile_contract|profile_validator_contract|encoder_fixture_contract|encoder_plaintext_oracle_smoke)'
+./build-openfhe/openfhe_encoder_layer_smoke \
+  --data-root data --layer 1 --input-level 29
+```
+
+On the development host the full correctness gate uses roughly 31 GiB peak RSS and
+takes about 31 minutes. This is a correctness observation, not an M6 benchmark. After
+the milestone commit has been pushed and the local and remote branch SHAs match, seal
+one warm-up plus five measured runs with:
+
+```bash
+/home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
+  scripts/run_openfhe_encoder_artifact.py
+```
+
+M4 does not establish 12-layer ciphertext execution, task-level inference, or a
+speedup over the optional SEAL reference.
 
 ## Optional legacy SEAL reference
 

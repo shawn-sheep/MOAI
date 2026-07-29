@@ -7,6 +7,10 @@
 namespace moai::openfhe {
 
 [[nodiscard]] CryptoProfile MakePaperCompatProfile();
+// Feature-packed BERT trace profile. This keeps the M1-M3 46/51-bit profile
+// frozen while using the separately hashed M4/M5 modulus sizes and bootstrap
+// schedule needed by the 1024-slot encoder packing.
+[[nodiscard]] CryptoProfile MakePaperCompatFeaturePackedProfile();
 [[nodiscard]] std::string CanonicalCryptoProfileJson(
     const CryptoProfile& profile);
 [[nodiscard]] std::string ComputeCryptoProfileParameterSha256(

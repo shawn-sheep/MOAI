@@ -161,6 +161,21 @@ void ConfigureBootstrap(
     RefreshParameterHash(profile);
 }
 
+CryptoProfile MakePaperCompatFeaturePackedProfile() {
+    auto profile = MakePaperCompatProfile();
+    profile.scaling_modulus_bits = 50;
+    profile.first_modulus_bits = 55;
+    ConfigureBootstrap(
+        profile,
+        1024,
+        28,
+        2,
+        14,
+        0,
+        false);
+    return profile;
+}
+
 void ValidateCryptoProfile(const CryptoProfile& profile) {
     if (profile.profile_id != "paper_compat") {
         throw std::invalid_argument("only the paper_compat profile is supported");
@@ -183,10 +198,25 @@ void ValidateCryptoProfile(const CryptoProfile& profile) {
         throw std::invalid_argument(
             "paper_compat requires ring_dimension=65536 and slot_count=32768");
     }
-    if (profile.scaling_modulus_bits != 46 ||
-        profile.first_modulus_bits != 51) {
+    const bool base_modulus_contract =
+        profile.scaling_modulus_bits == 46 &&
+        profile.first_modulus_bits == 51;
+    const bool feature_modulus_contract =
+        profile.scaling_modulus_bits == 50 &&
+        profile.first_modulus_bits == 55 &&
+        profile.bootstrap_enabled &&
+        profile.bootstrap_slots == 1024 &&
+        profile.levels_available_after_bootstrap == 28 &&
+        profile.bootstrap_iterations == 2 &&
+        profile.bootstrap_precision == 14 &&
+        profile.bootstrap_level_budget == std::vector<uint32_t>{4, 4} &&
+        profile.bootstrap_bsgs_dim == std::vector<uint32_t>{0, 0} &&
+        profile.bootstrap_correction_factor == 0 &&
+        !profile.bootstrap_slots_to_coefficients_first &&
+        profile.multiplicative_depth == 47;
+    if (!base_modulus_contract && !feature_modulus_contract) {
         throw std::invalid_argument(
-            "paper_compat requires the frozen 46/51-bit modulus sizes");
+            "paper_compat requires the frozen base or feature-packed modulus contract");
     }
     if (profile.secret_key_distribution != lbcrypto::SPARSE_TERNARY ||
         profile.sparse_secret_hamming_weight != 192) {

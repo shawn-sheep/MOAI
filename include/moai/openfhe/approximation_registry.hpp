@@ -64,4 +64,10 @@ MakePaperCompatSoftmaxShiftContract();
 [[nodiscard]] std::string ComputeCoefficientSha256(
     const std::vector<double>& coefficients);
 
+// Plaintext oracle for the exact OpenFHE Chebyshev coefficient convention:
+// c[0] / 2 + sum_{i=1}^d c[i] T_i(x). This never consumes ciphertext data.
+[[nodiscard]] double EvaluateChebyshevContractAt(
+    const ApproximationContract& contract,
+    double input);
+
 }  // namespace moai::openfhe

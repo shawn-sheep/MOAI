@@ -11,6 +11,15 @@ namespace moai::openfhe {
 
 using DenseWeights = std::vector<std::vector<double>>;
 
+inline constexpr uint32_t
+    kPaperCompatFeaturePackedSoftmaxPostBootstrapDepth = 11;
+inline constexpr uint32_t
+    kPaperCompatFeaturePackedSoftmaxPreBootstrapDepth = 6;
+inline constexpr double kPaperCompatFeaturePackedSoftmaxExpAtZero =
+    1.000000000011056;
+inline constexpr const char* kPaperCompatFeaturePackedSoftmaxExpCoefficientSha256 =
+    "6eda4377151897e8c4ca4d72f2a918db0b888fc6771f8ee5cf1d950b378de76f";
+
 struct GeluResult {
     CipherTensor polynomial_input;
     CipherTensor polynomial_output;
@@ -56,11 +65,30 @@ public:
         std::size_t head,
         const std::vector<double>& active_mask);
 
+    // Each head span must already contain one score replicated across all
+    // head_width slots. The operator normalizes those spans across ciphertexts
+    // (keys); it does not derive or inspect this public layout from activations.
+    [[nodiscard]] SoftmaxResult MultiHeadSoftmaxWithCheckpoints(
+        const CipherTensor& logits_by_key,
+        std::size_t layer,
+        std::size_t head_width);
+
+    [[nodiscard]] CipherTensor MultiHeadSoftmax(
+        const CipherTensor& logits_by_key,
+        std::size_t layer,
+        std::size_t head_width);
+
     [[nodiscard]] CipherTensor LayerNorm(
         const CipherTensor& input,
         const std::vector<double>& gamma,
         const std::vector<double>& beta,
         const std::vector<double>& active_mask,
+        PaperCompatLayerNormSite site);
+
+    [[nodiscard]] CipherTensor FeaturePackedLayerNorm(
+        const CipherTensor& input,
+        const std::vector<double>& gamma,
+        const std::vector<double>& beta,
         PaperCompatLayerNormSite site);
 
     [[nodiscard]] FeedForwardResult FeedForward(

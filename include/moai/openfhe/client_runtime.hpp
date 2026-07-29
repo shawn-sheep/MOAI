@@ -30,9 +30,13 @@ private:
     lbcrypto::PublicKey<lbcrypto::DCRTPoly> public_key_;
     lbcrypto::PrivateKey<lbcrypto::DCRTPoly> private_key_;
     bool keys_generated_{false};
-    bool multiplication_key_generated_{false};
-    bool bootstrap_key_generated_{false};
+    bool evaluation_keys_generated_{false};
     std::vector<int32_t> rotation_indices_;
+    std::vector<lbcrypto::EvalKey<lbcrypto::DCRTPoly>>
+        multiplication_eval_keys_;
+    std::map<uint32_t, lbcrypto::EvalKey<lbcrypto::DCRTPoly>>
+        automorphism_eval_keys_;
+    std::vector<uint32_t> bootstrap_required_indices_;
 };
 
 }  // namespace moai::openfhe

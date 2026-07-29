@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "runtime_id": "paper_compat_feature_packed_m4_m5",
+  "profile_id": "paper_compat",
+  "security_claim": "none",
+  "warning": "Research reproduction parameters only. Do not claim 128-bit security.",
+  "scope": "M4/M5 five-token BERT-base encoder trace replay with one 1024-slot ciphertext per token",
+  "validation_status": "five-token layer-1 server-only encoder gate passed; 12-layer encoder gate required",
+  "canonical_encoding": "UTF-8 JSON with lexicographically sorted keys and compact separators",
+  "effective_profile_sha256": "94f30e628e21f02146ce7ed9820194eabba3820f6e1e17176a31f8c5acf8b0be",
+  "effective_profile": {
+    "bootstrap_bsgs_dim": [0, 0],
+    "bootstrap_correction_factor": 0,
+    "bootstrap_enabled": true,
+    "bootstrap_iterations": 2,
+    "bootstrap_level_budget": [4, 4],
+    "bootstrap_precision": 14,
+    "bootstrap_slots": 1024,
+    "bootstrap_slots_to_coefficients_first": false,
+    "effective_profile_schema_version": 1,
+    "first_modulus_bits": 55,
+    "key_switch_technique": "HYBRID",
+    "levels_available_after_bootstrap": 28,
+    "multiplicative_depth": 47,
+    "num_large_digits": 3,
+    "profile_id": "paper_compat",
+    "ring_dimension": 65536,
+    "scaling_modulus_bits": 50,
+    "scaling_technique": "FLEXIBLEAUTO",
+    "secret_key_distribution": "SPARSE_TERNARY",
+    "security_claim": "none",
+    "security_level": "HEStd_NotSet",
+    "slot_count": 32768,
+    "sparse_secret_hamming_weight": 192
+  },
+  "feature_packed_softmax_override": {
+    "scope": "M4/M5 1024-slot multi-head path only; the M3 generic Softmax contract is unchanged",
+    "exponential_coefficient_sha256": "6eda4377151897e8c4ca4d72f2a918db0b888fc6771f8ee5cf1d950b378de76f",
+    "exponential_at_zero": 1.000000000011056,
+    "inactive_slot_cleanup": "subtract the frozen P_exp(0) plaintext only from public inactive slots",
+    "pre_bootstrap_required_depth": 6,
+    "post_bootstrap_required_depth": 11,
+    "attention_output_cleanup": "native bootstrap followed by one public 768-prefix Ct-Pt mask",
+    "gate": {
+      "inactive_max_absolute": 1e-6,
+      "threshold_policy": "may tighten; never silently relax"
+    }
+  }
+}

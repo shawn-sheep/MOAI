@@ -42,6 +42,64 @@ int main() {
     try {
         auto profile = moai::openfhe::MakePaperCompatProfile();
         moai::openfhe::PrintSecurityDisclosure(profile, std::cout);
+        const auto feature_profile =
+            moai::openfhe::MakePaperCompatFeaturePackedProfile();
+        moai::openfhe::ValidateCryptoProfile(feature_profile);
+        if (feature_profile.parameter_sha256 !=
+                "94f30e628e21f02146ce7ed9820194eabba3820f6e1e17176a31f8c5acf8b0be" ||
+            feature_profile.scaling_modulus_bits != 50 ||
+            feature_profile.first_modulus_bits != 55 ||
+            feature_profile.bootstrap_slots != 1024 ||
+            feature_profile.levels_available_after_bootstrap != 28 ||
+            feature_profile.bootstrap_iterations != 2 ||
+            feature_profile.bootstrap_precision != 14 ||
+            feature_profile.bootstrap_level_budget !=
+                std::vector<uint32_t>{4, 4} ||
+            feature_profile.bootstrap_bsgs_dim !=
+                std::vector<uint32_t>{0, 0} ||
+            feature_profile.bootstrap_correction_factor != 0 ||
+            feature_profile.bootstrap_slots_to_coefficients_first ||
+            feature_profile.multiplicative_depth != 47) {
+            throw std::runtime_error(
+                "feature-packed paper_compat profile contract drifted");
+        }
+        const auto require_feature_profile_rejected =
+            [](auto mutated, const char* label) {
+                mutated.parameter_sha256 =
+                    moai::openfhe::ComputeCryptoProfileParameterSha256(mutated);
+                bool rejected = false;
+                try {
+                    moai::openfhe::ValidateCryptoProfile(mutated);
+                }
+                catch (const std::invalid_argument&) {
+                    rejected = true;
+                }
+                if (!rejected) {
+                    throw std::runtime_error(
+                        std::string("feature-packed profile accepted mutated ") +
+                        label);
+                }
+            };
+        auto mutated_feature_profile = feature_profile;
+        mutated_feature_profile.bootstrap_level_budget = {3, 4};
+        require_feature_profile_rejected(
+            mutated_feature_profile,
+            "bootstrap level budget after rehash");
+        mutated_feature_profile = feature_profile;
+        mutated_feature_profile.bootstrap_bsgs_dim = {1, 0};
+        require_feature_profile_rejected(
+            mutated_feature_profile,
+            "bootstrap BSGS dimension after rehash");
+        mutated_feature_profile = feature_profile;
+        mutated_feature_profile.bootstrap_correction_factor = 1;
+        require_feature_profile_rejected(
+            mutated_feature_profile,
+            "bootstrap correction factor after rehash");
+        mutated_feature_profile = feature_profile;
+        mutated_feature_profile.bootstrap_slots_to_coefficients_first = true;
+        require_feature_profile_rejected(
+            mutated_feature_profile,
+            "bootstrap slots-to-coefficients order after rehash");
         auto missing_warning_profile = profile;
         missing_warning_profile.warning.clear();
         bool missing_warning_rejected = false;

@@ -7,6 +7,10 @@ the frozen v2 contract. With ``--manifest`` it additionally validates the
 manifest structure, canonical effective-profile hash, repository inputs, and
 run-directory artifacts. ``--verify-git`` adds live local/remote ref checks.
 
+Schema v2 dispatches two non-interchangeable payloads: the frozen M3 nonlinear
+smoke and the M4 server-only encoder layer. M5 and M6 are not accepted until
+separate contracts are defined.
+
 Schema-version-1 manifests are immutable legacy evidence. They are not upgraded
 or accepted by this validator.
 """
@@ -19,6 +23,7 @@ import hashlib
 import json
 import math
 import re
+import shlex
 import statistics
 import subprocess
 import sys
@@ -108,6 +113,182 @@ M3_EXPECTED_OPERATION_COUNTS = {
     "estimated_polynomial_multiplications": 111,
     "max_polynomial_depth": 10,
 }
+REQUIRED_ENCODER_INPUTS = {
+    "config/moai_encoder_trace.json",
+    "config/moai_trace_channel_scales.json",
+    "config/openfhe_approximations.json",
+    "config/paper_compat_feature_packed.json",
+}
+M4_EXPECTED_THRESHOLDS = {
+    "relative_l2_max": 1e-2,
+    "cosine_min": 0.999,
+    "inactive_max_abs": 1e-6,
+}
+M4_CHECKPOINT_NAMES = (
+    "attention_output",
+    "self_layernorm_output",
+    "ffn_output",
+    "encoder_output",
+)
+M4_MULTIPLICATIVE_DEPTH = 47
+M4_MAX_OBSERVED_LEVEL = 45
+M4_MAX_POLYNOMIAL_DEPTH = 10
+M4_EXPECTED_CHECKPOINTS = (
+    {
+        "name": "attention_output",
+        "level": 40,
+        "noise_scale_degree": 2,
+        "remaining_levels": 6,
+        "scale_bits": 100,
+        "ciphertext_count": 5,
+        "decryption_owner": "client",
+    },
+    {
+        "name": "self_layernorm_output",
+        "level": 32,
+        "noise_scale_degree": 2,
+        "remaining_levels": 14,
+        "scale_bits": 100,
+        "ciphertext_count": 5,
+        "decryption_owner": "client",
+    },
+    {
+        "name": "ffn_output",
+        "level": 45,
+        "noise_scale_degree": 2,
+        "remaining_levels": 1,
+        "scale_bits": 100,
+        "ciphertext_count": 5,
+        "decryption_owner": "client",
+    },
+    {
+        "name": "encoder_output",
+        "level": 29,
+        "noise_scale_degree": 2,
+        "remaining_levels": 17,
+        "scale_bits": 100,
+        "ciphertext_count": 5,
+        "decryption_owner": "client",
+    },
+)
+M4_CHECKPOINT_METADATA_SHA256 = (
+    "c4c1c85e52154215784b9fa93a584d824dde94a644e5af997882486aac01a6db"
+)
+M4_PHASE_LATENCY_FIELDS = (
+    "fixture_load_ms",
+    "setup_keygen_ms",
+    "client_encrypt_ms",
+    "server_online_ms",
+    "client_decrypt_validate_ms",
+)
+M4_TOKENS_PER_BATCH = 5
+M4_DIAGNOSTIC_KEYS = {
+    "test",
+    "profile",
+    "security_claim",
+    "parameter_sha256",
+    "layer",
+    "input_level",
+    "tokens",
+    "hidden_size",
+    "intermediate_size",
+    "feature_block",
+    *M4_PHASE_LATENCY_FIELDS,
+    "relative_l2",
+    "cosine",
+    "max_absolute",
+    "exact_trace_relative_l2",
+    "exact_trace_cosine",
+    "exact_trace_max_absolute",
+    "inactive_max_absolute",
+    "peak_rss_bytes",
+    "rotations",
+    "ct_pt_multiplications",
+    "ct_ct_multiplications",
+    "explicit_rescale_requests",
+    "chebyshev_evaluations",
+    "estimated_polynomial_multiplications",
+    "bootstraps",
+    "bootstrap_iterations",
+    "final_level",
+    "final_remaining_levels",
+    "multiplicative_depth",
+    "max_observed_level",
+    "max_polynomial_depth",
+}
+ENCODER_TRACE_SHAPE = [5, 768]
+ENCODER_TRACE_VALUE_COUNT = 5 * 768
+ENCODER_FEATURE_BLOCK_SIZE = 1024
+ENCODER_BOOTSTRAP_ITERATIONS_PER_CALL = 2
+ENCODER_FEATURE_PROFILE_PATH = "config/paper_compat_feature_packed.json"
+ENCODER_FEATURE_PROFILE_LOCATOR = "/effective_profile"
+ENCODER_FEATURE_PROFILE_SHA256 = (
+    "94f30e628e21f02146ce7ed9820194eabba3820f6e1e17176a31f8c5acf8b0be"
+)
+ENCODER_PROFILE_FIELDS = {
+    "effective_profile_schema_version": 1,
+    "ring_dimension": 65536,
+    "slot_count": 32768,
+    "scaling_modulus_bits": 50,
+    "first_modulus_bits": 55,
+    "multiplicative_depth": 47,
+    "levels_available_after_bootstrap": 28,
+    "bootstrap_slots": 1024,
+    "bootstrap_iterations": 2,
+    "bootstrap_precision": 14,
+    "scaling_technique": "FLEXIBLEAUTO",
+    "security_claim": "none",
+    "security_level": "HEStd_NotSet",
+}
+M4_LAYER_ID = 1
+M4_INPUT_LEVEL = 29
+M4_OUTPUT_LEVEL = 29
+M4_REMAINING_LEVELS = 17
+ENCODER_BOOTSTRAPS_PER_LAYER = 25
+ENCODER_BOOTSTRAP_ITERATIONS_PER_LAYER = 50
+ENCODER_ROTATIONS_PER_LAYER = 6300
+ENCODER_CT_PT_MULTIPLICATIONS_PER_LAYER = 51865
+ENCODER_CT_CT_MULTIPLICATIONS_PER_LAYER = 95
+ENCODER_EXPLICIT_RESCALE_REQUESTS_PER_LAYER = 800
+ENCODER_CHEBYSHEV_EVALUATIONS_PER_LAYER = 55
+ENCODER_ESTIMATED_POLYNOMIAL_MULTIPLICATIONS_PER_LAYER = 1150
+M4_WORKLOAD_EXECUTABLE_PATH = "build-openfhe/openfhe_encoder_layer_smoke"
+M4_CTEST_PATTERN = (
+    "^(moai_trace_contract|openfhe_(server_trust_boundary|profile_contract|"
+    "artifact_schema_contract|artifact_validator_contract|"
+    "encoder_artifact_runner_contract|evaluation_key_bundle_smoke|"
+    "feature_packed_smoke|"
+    "feature_packed_attention_smoke|feature_bootstrap_smoke|"
+    "encoder_fixture_contract|"
+    "encoder_plaintext_oracle_smoke|encoder_trace_contract|"
+    "encoder_trace_validator_contract))$"
+)
+ENCODER_OPERATION_COUNT_KEYS = {
+    "rotations",
+    "ct_pt_multiplications",
+    "ct_ct_multiplications",
+    "explicit_rescale_requests",
+    "chebyshev_evaluations",
+    "estimated_polynomial_multiplications",
+    "bootstraps",
+    "bootstrap_iterations",
+}
+M4_EXECUTION_KEYS = {
+    "mode",
+    "encoder_layers",
+    "layer_id",
+    "trace_shape",
+    "feature_block_size",
+    "checkpoint_decryption_owner",
+    "server_private_key_present",
+    "server_decryptions",
+    "server_plaintext_activations",
+    "multiplicative_depth",
+    "max_observed_level",
+    "max_polynomial_depth",
+    "required_checkpoints",
+    "quality_reference",
+}
 REQUIRED_TOP_LEVEL = {
     "schema_version",
     "run_id",
@@ -152,6 +333,7 @@ SUPPORTED_SCHEMA_KEYWORDS = {
     "items",
     "minProperties",
     "maxProperties",
+    "oneOf",
 }
 
 
@@ -196,6 +378,10 @@ def canonical_json_bytes(value: Any) -> bytes:
     except (TypeError, ValueError) as error:
         raise ValidationError(f"value cannot be canonicalized as JSON: {error}") from error
     return text.encode("utf-8")
+
+
+def checkpoint_metadata_sha256(checkpoints: Any) -> str:
+    return hashlib.sha256(canonical_json_bytes(checkpoints)).hexdigest()
 
 
 def sha256_file(path: Path) -> str:
@@ -272,6 +458,23 @@ def validate_instance(
             location,
         )
         return
+
+    if "oneOf" in schema:
+        alternatives = schema["oneOf"]
+        matches = 0
+        failures: list[str] = []
+        for alternative in alternatives:
+            try:
+                validate_instance(instance, alternative, root_schema, location)
+                matches += 1
+            except ValidationError as error:
+                failures.append(str(error))
+        if matches != 1:
+            detail = failures[0] if failures else "multiple alternatives matched"
+            raise ValidationError(
+                f"{location}: expected exactly one schema alternative, matched={matches}; "
+                f"first_failure={detail}"
+            )
 
     if "type" in schema and not _type_matches(instance, schema["type"]):
         raise ValidationError(
@@ -411,6 +614,13 @@ def _walk_schema(node: Any, root_schema: dict[str, Any], location: str = "$schem
         raise ValidationError(f"{location}.$defs must be an object")
     for key, child in definitions.items():
         _walk_schema(child, root_schema, f"{location}.$defs.{key}")
+    alternatives = node.get("oneOf", [])
+    if not isinstance(alternatives, list) or (
+        "oneOf" in node and len(alternatives) < 2
+    ):
+        raise ValidationError(f"{location}.oneOf must contain at least two schemas")
+    for index, child in enumerate(alternatives):
+        _walk_schema(child, root_schema, f"{location}.oneOf[{index}]")
     for keyword in ("items", "additionalProperties"):
         child = node.get(keyword)
         if isinstance(child, dict):
@@ -433,6 +643,11 @@ def validate_schema(schema: Any) -> dict[str, Any]:
     version_schema = schema.get("properties", {}).get("schema_version", {})
     if version_schema.get("const") != 2:
         raise ValidationError("schema_version must be frozen at 2")
+    milestone_schema = schema.get("properties", {}).get("milestone", {})
+    if milestone_schema.get("enum") != ["M3", "M4"]:
+        raise ValidationError("schema-v2 milestone dispatch must be exactly M3/M4")
+    if not isinstance(schema.get("oneOf"), list) or len(schema["oneOf"]) != 2:
+        raise ValidationError("schema root must contain two milestone alternatives")
     _walk_schema(schema, schema)
     return schema
 
@@ -613,7 +828,9 @@ def _verify_git(manifest: dict[str, Any], repository_root: Path, live: bool) -> 
             )
 
 
-def _parse_runtime_records(stdout_path: Path) -> list[dict[str, Any]]:
+def _parse_runtime_records(
+    stdout_path: Path, test_name: str = "openfhe_nonlinear_smoke"
+) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     try:
         lines = stdout_path.read_text(encoding="utf-8").splitlines()
@@ -631,9 +848,148 @@ def _parse_runtime_records(stdout_path: Path) -> list[dict[str, Any]]:
             )
         except (json.JSONDecodeError, ValidationError):
             continue
-        if isinstance(candidate, dict) and candidate.get("test") == "openfhe_nonlinear_smoke":
+        if isinstance(candidate, dict) and candidate.get("test") == test_name:
             records.append(candidate)
     return records
+
+
+def _command_tokens(
+    record: Any,
+    label: str,
+    *,
+    timed: bool,
+) -> list[str]:
+    expected_keys = {"command", "cwd", "exit_code", "phase"}
+    if timed:
+        expected_keys.update({"started_at", "finished_at"})
+    value = _require_exact_object_keys(record, expected_keys, label)
+    if value["cwd"] != str(REPO_ROOT):
+        raise ValidationError(f"{label}.cwd must be {REPO_ROOT}")
+    if value["exit_code"] != 0 or value["phase"] != "artifact_generation":
+        raise ValidationError(
+            f"{label} must record exit_code=0 and phase=artifact_generation"
+        )
+    if timed:
+        started = _parse_timestamp(value["started_at"], f"{label}.started_at")
+        finished = _parse_timestamp(value["finished_at"], f"{label}.finished_at")
+        if finished < started:
+            raise ValidationError(f"{label}.finished_at precedes started_at")
+    try:
+        tokens = shlex.split(value["command"])
+    except ValueError as error:
+        raise ValidationError(f"{label}.command is not valid shell syntax: {error}") from error
+    if not tokens:
+        raise ValidationError(f"{label}.command must not be empty")
+    return tokens
+
+
+def _verify_m4_go_command_transcript(
+    manifest: dict[str, Any],
+    manifest_path: Path,
+) -> None:
+    if manifest["milestone"] != "M4" or manifest["verdict"] != "GO":
+        return
+    commands = manifest["commands"]
+    if len(commands) != 14:
+        raise ValidationError(
+            "M4 GO commands transcript must contain exactly 14 ordered records"
+        )
+    expected_git = [
+        ["git", "status", "--porcelain=v1", "--untracked-files=normal"],
+        ["git", "branch", "--show-current"],
+        ["git", "rev-parse", "HEAD"],
+        [
+            "git",
+            "ls-remote",
+            "--exit-code",
+            "origin",
+            "refs/heads/refactor/openfhe-cpu",
+        ],
+    ]
+    for index, expected in enumerate(expected_git):
+        actual = _command_tokens(
+            commands[index], f"commands[{index}] Git preflight", timed=False
+        )
+        if actual != expected:
+            raise ValidationError(
+                f"commands[{index}] differs from the frozen Git preflight"
+            )
+
+    build_root = REPO_ROOT / "build-openfhe"
+    executable = REPO_ROOT / M4_WORKLOAD_EXECUTABLE_PATH
+    build = _command_tokens(commands[4], "commands[4] clean-first build", timed=True)
+    if build != [
+        "cmake",
+        "--build",
+        str(build_root),
+        "--clean-first",
+        "-j",
+        "4",
+    ]:
+        raise ValidationError("commands[4] differs from the frozen clean-first build")
+    ctest = _command_tokens(commands[5], "commands[5] narrow CTest", timed=True)
+    if ctest != [
+        "ctest",
+        "--test-dir",
+        str(build_root),
+        "--output-on-failure",
+        "--no-tests=error",
+        "-R",
+        M4_CTEST_PATTERN,
+    ]:
+        raise ValidationError("commands[5] differs from the frozen narrow CTest")
+    linkage = _command_tokens(commands[6], "commands[6] OpenFHE linkage", timed=True)
+    if linkage != ["ldd", str(executable)]:
+        raise ValidationError("commands[6] differs from the frozen ldd check")
+
+    expected_workload_tail = [
+        str(executable),
+        "--data-root",
+        str(REPO_ROOT / "data"),
+        "--layer",
+        "1",
+        "--input-level",
+        "29",
+    ]
+    time_outputs: set[str] = set()
+    normalized_workloads: list[list[str]] = []
+    for index in range(7, 13):
+        workload = _command_tokens(
+            commands[index], f"commands[{index}] encoder workload", timed=True
+        )
+        if len(workload) != 10:
+            raise ValidationError(f"commands[{index}] encoder workload shape drifted")
+        if workload[:2] != ["/usr/bin/time", "--format=%M"]:
+            raise ValidationError(f"commands[{index}] must use frozen GNU time")
+        output_option = workload[2]
+        if re.fullmatch(r"--output=/tmp/moai-m4-time-[A-Za-z0-9_.-]+\.txt", output_option) is None:
+            raise ValidationError(
+                f"commands[{index}] GNU time output path is not the frozen temporary form"
+            )
+        if workload[3:] != expected_workload_tail:
+            raise ValidationError(f"commands[{index}] encoder invocation drifted")
+        time_outputs.add(output_option)
+        normalized_workloads.append([*workload[:2], "--output=<temporary>", *workload[3:]])
+    if len(time_outputs) != 6 or any(
+        workload != normalized_workloads[0] for workload in normalized_workloads[1:]
+    ):
+        raise ValidationError(
+            "commands[7:13] must contain six identical frozen workload invocations "
+            "with distinct GNU time outputs"
+        )
+
+    validator_command = _command_tokens(
+        commands[13], "commands[13] artifact validator", timed=False
+    )
+    expected_validator = [
+        sys.executable,
+        str(REPO_ROOT / "scripts" / "validate_openfhe_artifact.py"),
+        "--manifest",
+        str(manifest_path.resolve()),
+        "--verify-git",
+    ]
+    if validator_command != expected_validator:
+        raise ValidationError("commands[13] differs from the frozen artifact validator")
 
 
 def _verify_m3_contract_bindings(
@@ -726,6 +1082,996 @@ def _verify_m3_contract_bindings(
         raise ValidationError("manifest M3 thresholds do not match the frozen gate")
 
 
+def _require_exact_object_keys(
+    value: Any, expected: set[str], label: str
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValidationError(f"{label} must be an object")
+    if set(value) != expected:
+        raise ValidationError(
+            f"{label} keys differ: missing={sorted(expected - set(value))} "
+            f"extra={sorted(set(value) - expected)}"
+        )
+    return value
+
+
+def _expected_encoder_trace_inputs(
+    trace_contract: dict[str, Any],
+) -> dict[str, dict[str, str]]:
+    try:
+        required_files = trace_contract["required_files"]
+        layers = trace_contract["layers"]
+    except (KeyError, TypeError) as error:
+        raise ValidationError(
+            f"encoder trace contract is missing file bindings: {error}"
+        ) from error
+    if not isinstance(required_files, dict) or len(required_files) != 37:
+        raise ValidationError("encoder trace contract must map exactly 37 logical files")
+    if not isinstance(layers, list) or len(layers) != 12:
+        raise ValidationError("encoder trace contract must contain exactly 12 layers")
+
+    layer_by_id: dict[int, dict[str, Any]] = {}
+    for index, layer in enumerate(layers):
+        if not isinstance(layer, dict):
+            raise ValidationError(f"encoder trace layer {index} must be an object")
+        layer_id = layer.get("layer_id")
+        if (
+            not isinstance(layer_id, int)
+            or isinstance(layer_id, bool)
+            or layer_id not in range(12)
+            or layer_id in layer_by_id
+        ):
+            raise ValidationError("encoder trace layer ids must be exactly 0 through 11")
+        layer_by_id[layer_id] = layer
+    if set(layer_by_id) != set(range(12)):
+        raise ValidationError("encoder trace layer ids must be exactly 0 through 11")
+
+    layer_ids = [M4_LAYER_ID]
+    expected: dict[str, dict[str, str]] = {}
+    for layer_id in layer_ids:
+        hashes = layer_by_id[layer_id].get("sha256")
+        if not isinstance(hashes, dict) or set(hashes) != set(required_files):
+            raise ValidationError(
+                f"encoder trace layer {layer_id} must bind all 37 logical files"
+            )
+        for logical_name in sorted(required_files):
+            specification = required_files[logical_name]
+            if not isinstance(specification, dict):
+                raise ValidationError(
+                    f"encoder trace file mapping {logical_name!r} must be an object"
+                )
+            contract_path = specification.get("path")
+            if not isinstance(contract_path, str):
+                raise ValidationError(
+                    f"encoder trace file mapping {logical_name!r} lacks a path"
+                )
+            raw_path = Path(contract_path)
+            if (
+                raw_path.is_absolute()
+                or "\\" in contract_path
+                or ".." in raw_path.parts
+                or raw_path.as_posix() != contract_path
+            ):
+                raise ValidationError(
+                    f"encoder trace file mapping {logical_name!r} is not normalized"
+                )
+            repository_path = (
+                Path("data") / f"layer_{layer_id}" / raw_path
+            ).as_posix()
+            if repository_path in expected:
+                raise ValidationError(
+                    f"encoder trace file mappings collide at {repository_path}"
+                )
+            expected[repository_path] = {
+                "sha256": hashes[logical_name],
+                "media_type": "text/csv",
+                "role": "weights" if "/parms/" in f"/{contract_path}" else "trace",
+            }
+
+    expected_count = 37
+    if len(expected) != expected_count:
+        raise ValidationError(
+            f"M4 encoder trace must bind exactly {expected_count} data files"
+        )
+    return expected
+
+
+def _verify_encoder_contract_bindings(
+    manifest: dict[str, Any],
+    repository_root: Path,
+    input_records: dict[str, dict[str, Any]],
+) -> None:
+    milestone = manifest["milestone"]
+    missing_inputs = REQUIRED_ENCODER_INPUTS - set(input_records)
+    if missing_inputs:
+        raise ValidationError(
+            f"{milestone} manifest is missing frozen config inputs: "
+            f"{sorted(missing_inputs)}"
+        )
+    for path in REQUIRED_ENCODER_INPUTS:
+        record = input_records[path]
+        if record["media_type"] != "application/json" or record["role"] != "configuration":
+            raise ValidationError(
+                f"{milestone} config input {path} must be application/json configuration"
+            )
+
+    contracts = _require_exact_object_keys(
+        manifest["contracts"],
+        {
+            "approximation_config_path",
+            "approximation_config_sha256",
+            "encoder_trace_contract_path",
+            "encoder_trace_contract_sha256",
+            "profile_config_path",
+            "profile_config_sha256",
+            "execution",
+            "thresholds",
+        },
+        f"{milestone} contracts",
+    )
+    contract_inputs = {
+        "approximation_config": "config/openfhe_approximations.json",
+        "encoder_trace_contract": "config/moai_encoder_trace.json",
+        "profile_config": ENCODER_FEATURE_PROFILE_PATH,
+    }
+    for prefix, expected_path in contract_inputs.items():
+        if contracts[f"{prefix}_path"] != expected_path:
+            raise ValidationError(f"contracts.{prefix}_path must be {expected_path}")
+        if contracts[f"{prefix}_sha256"] != input_records[expected_path]["sha256"]:
+            raise ValidationError(
+                f"contracts.{prefix}_sha256 does not match inputs record"
+            )
+
+    profile = manifest["profile"]
+    profile_input = input_records[ENCODER_FEATURE_PROFILE_PATH]
+    if profile["source_config_path"] != ENCODER_FEATURE_PROFILE_PATH or (
+        profile["source_config_sha256"] != profile_input["sha256"]
+        or profile["source_config_bytes"] != profile_input["bytes"]
+    ):
+        raise ValidationError(
+            f"{milestone} profile source does not match "
+            f"{ENCODER_FEATURE_PROFILE_PATH}"
+        )
+    if (
+        profile["effective_profile_locator"] != ENCODER_FEATURE_PROFILE_LOCATOR
+        or profile["effective_profile_sha256"] != ENCODER_FEATURE_PROFILE_SHA256
+    ):
+        raise ValidationError(
+            f"{milestone} profile must bind {ENCODER_FEATURE_PROFILE_LOCATOR} "
+            f"with SHA-256 {ENCODER_FEATURE_PROFILE_SHA256}"
+        )
+    effective = profile["effective_profile_payload"]
+    mismatches = {
+        key: {"expected": expected, "actual": effective.get(key)}
+        for key, expected in ENCODER_PROFILE_FIELDS.items()
+        if effective.get(key) != expected
+    }
+    if mismatches:
+        raise ValidationError(
+            "M4 evidence requires the frozen 1024-slot/depth-47 "
+            f"encoder profile: {mismatches}"
+        )
+
+    trace_contract = load_json(repository_root / "config/moai_encoder_trace.json")
+    try:
+        if (
+            trace_contract["profile_id"] != "paper_compat"
+            or trace_contract["security_claim"] != "none"
+            or trace_contract["dimensions"]["encoder_layers"] != 12
+            or trace_contract["dimensions"]["trace_token_rows"] != 5
+            or trace_contract["dimensions"]["hidden_size"] != 768
+        ):
+            raise ValidationError("frozen encoder trace contract identity drifted")
+    except (KeyError, TypeError) as error:
+        raise ValidationError(
+            f"encoder trace contract is missing a required identity field: {error}"
+        ) from error
+
+    try:
+        sources = trace_contract["sources"]
+        if set(sources) != {"approximations", "channel_scales"}:
+            raise ValidationError("encoder trace contract source bindings drifted")
+        source_inputs = {
+            "approximations": "config/openfhe_approximations.json",
+            "channel_scales": "config/moai_trace_channel_scales.json",
+        }
+        for source_name, expected_path in source_inputs.items():
+            source = sources[source_name]
+            if (
+                source["path"] != expected_path
+                or source["sha256"] != input_records[expected_path]["sha256"]
+            ):
+                raise ValidationError(
+                    f"encoder trace contract source {source_name} does not match inputs"
+                )
+    except (KeyError, TypeError) as error:
+        raise ValidationError(
+            f"encoder trace contract is missing a source binding: {error}"
+        ) from error
+
+    expected_trace_inputs = _expected_encoder_trace_inputs(trace_contract)
+    expected_input_paths = REQUIRED_ENCODER_INPUTS | set(expected_trace_inputs)
+    actual_input_paths = set(input_records)
+    if actual_input_paths != expected_input_paths:
+        raise ValidationError(
+            f"{milestone} inputs differ from the frozen encoder trace set: "
+            f"missing={sorted(expected_input_paths - actual_input_paths)} "
+            f"extra={sorted(actual_input_paths - expected_input_paths)}"
+        )
+    for path, expected_record in expected_trace_inputs.items():
+        record = input_records[path]
+        for key, expected_value in expected_record.items():
+            if record[key] != expected_value:
+                raise ValidationError(
+                    f"{milestone} encoder trace input {path} has wrong {key}: "
+                    f"expected={expected_value!r} actual={record[key]!r}"
+                )
+
+    if manifest["workload"]["executable_path"] != M4_WORKLOAD_EXECUTABLE_PATH:
+        raise ValidationError(
+            f"M4 workload.executable_path must be {M4_WORKLOAD_EXECUTABLE_PATH}"
+        )
+
+    execution = contracts["execution"]
+    common_values = {
+        "mode": "server-only",
+        "trace_shape": ENCODER_TRACE_SHAPE,
+        "feature_block_size": ENCODER_FEATURE_BLOCK_SIZE,
+        "checkpoint_decryption_owner": "client",
+        "server_private_key_present": False,
+        "server_decryptions": 0,
+        "server_plaintext_activations": False,
+        "multiplicative_depth": M4_MULTIPLICATIVE_DEPTH,
+        "max_observed_level": M4_MAX_OBSERVED_LEVEL,
+        "max_polynomial_depth": M4_MAX_POLYNOMIAL_DEPTH,
+    }
+    _require_exact_object_keys(execution, M4_EXECUTION_KEYS, "M4 execution")
+    expected_values = {
+        **common_values,
+        "quality_reference": (
+            "config/moai_encoder_trace.json single-layer frozen polynomial oracle"
+        ),
+        "encoder_layers": 1,
+        "layer_id": M4_LAYER_ID,
+        "required_checkpoints": list(M4_CHECKPOINT_NAMES),
+    }
+    for key, expected in expected_values.items():
+        if execution.get(key) != expected:
+            raise ValidationError(
+                f"{milestone} execution.{key} mismatch: expected={expected!r} "
+                f"actual={execution.get(key)!r}"
+            )
+    if contracts["thresholds"] != M4_EXPECTED_THRESHOLDS:
+        raise ValidationError(
+            f"manifest {milestone} thresholds do not match the frozen gate"
+        )
+
+
+def _verify_contract_bindings(
+    manifest: dict[str, Any],
+    repository_root: Path,
+    input_records: dict[str, dict[str, Any]],
+) -> None:
+    milestone = manifest["milestone"]
+    if milestone == "M3":
+        _verify_m3_contract_bindings(manifest, repository_root, input_records)
+    elif milestone == "M4":
+        _verify_encoder_contract_bindings(manifest, repository_root, input_records)
+    else:
+        raise ValidationError(f"unsupported schema-v2 milestone: {milestone}")
+
+
+def _require_finite_number(
+    value: Any,
+    label: str,
+    minimum: float,
+    maximum: float,
+) -> float:
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+        or value < minimum
+        or value > maximum
+    ):
+        raise ValidationError(f"{label} violates [{minimum},{maximum}]")
+    return float(value)
+
+
+def _verify_encoder_operation_counts(
+    value: Any,
+    label: str,
+    expected_rotations: int,
+    expected_bootstraps: int,
+    expected_iterations: int,
+) -> dict[str, int]:
+    counts = _require_exact_object_keys(
+        value, ENCODER_OPERATION_COUNT_KEYS, label
+    )
+    for key, count in counts.items():
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise ValidationError(f"{label}.{key} must be a nonnegative integer")
+    expected_counts = {
+        "rotations": expected_rotations,
+        "ct_pt_multiplications": ENCODER_CT_PT_MULTIPLICATIONS_PER_LAYER,
+        "ct_ct_multiplications": ENCODER_CT_CT_MULTIPLICATIONS_PER_LAYER,
+        "explicit_rescale_requests": ENCODER_EXPLICIT_RESCALE_REQUESTS_PER_LAYER,
+        "chebyshev_evaluations": ENCODER_CHEBYSHEV_EVALUATIONS_PER_LAYER,
+        "estimated_polynomial_multiplications": (
+            ENCODER_ESTIMATED_POLYNOMIAL_MULTIPLICATIONS_PER_LAYER
+        ),
+        "bootstraps": expected_bootstraps,
+        "bootstrap_iterations": expected_iterations,
+    }
+    for key, expected in expected_counts.items():
+        if counts[key] != expected:
+            raise ValidationError(
+                f"{label}.{key} must be {expected}, got {counts[key]}"
+            )
+    return counts
+
+
+def _verify_encoder_runtime_identity(
+    record: dict[str, Any],
+    profile: dict[str, Any],
+    execution: dict[str, Any],
+    label: str,
+) -> None:
+    expected = {
+        "profile": profile["id"],
+        "security_claim": profile["security_claim"],
+        "parameter_sha256": profile["effective_profile_sha256"],
+        "execution_mode": "server-only",
+        "actual_trace_shape": ENCODER_TRACE_SHAPE,
+        "actual_trace_value_count": ENCODER_TRACE_VALUE_COUNT,
+        "feature_block_size": ENCODER_FEATURE_BLOCK_SIZE,
+        "checkpoint_decryption_owner": "client",
+        "server_private_key_present": False,
+        "server_decryptions": 0,
+        "server_plaintext_activations": False,
+        "multiplicative_depth": M4_MULTIPLICATIVE_DEPTH,
+        "max_observed_level": M4_MAX_OBSERVED_LEVEL,
+        "max_polynomial_depth": M4_MAX_POLYNOMIAL_DEPTH,
+    }
+    for key, expected_value in expected.items():
+        if record.get(key) != expected_value:
+            raise ValidationError(
+                f"{label}: {key} mismatch: expected={expected_value!r} "
+                f"actual={record.get(key)!r}"
+            )
+    if execution["trace_shape"] != record["actual_trace_shape"]:
+        raise ValidationError(f"{label}: actual trace shape differs from contract")
+
+
+def _verify_checkpoint(
+    checkpoint: Any,
+    expected: dict[str, Any],
+    label: str,
+) -> dict[str, Any]:
+    value = _require_exact_object_keys(
+        checkpoint,
+        {
+            "name",
+            "level",
+            "noise_scale_degree",
+            "remaining_levels",
+            "scale_bits",
+            "ciphertext_count",
+            "decryption_owner",
+        },
+        label,
+    )
+    if value["name"] != expected["name"]:
+        raise ValidationError(
+            f"{label}.name must be {expected['name']!r}, got {value['name']!r}"
+        )
+    level = value["level"]
+    if (
+        not isinstance(level, int)
+        or isinstance(level, bool)
+        or level != expected["level"]
+    ):
+        raise ValidationError(f"{label}.level must be {expected['level']}")
+    _require_finite_number(value["scale_bits"], f"{label}.scale_bits", 1.0, 100.0)
+    noise_scale_degree = value["noise_scale_degree"]
+    if (
+        not isinstance(noise_scale_degree, int)
+        or isinstance(noise_scale_degree, bool)
+        or noise_scale_degree <= 0
+    ):
+        raise ValidationError(f"{label}.noise_scale_degree must be a positive integer")
+    remaining_levels = value["remaining_levels"]
+    if (
+        not isinstance(remaining_levels, int)
+        or isinstance(remaining_levels, bool)
+        or remaining_levels <= 0
+    ):
+        raise ValidationError(f"{label}.remaining_levels must be a positive integer")
+    ciphertext_count = value["ciphertext_count"]
+    if (
+        not isinstance(ciphertext_count, int)
+        or isinstance(ciphertext_count, bool)
+        or ciphertext_count != 5
+    ):
+        raise ValidationError(f"{label}.ciphertext_count must be 5")
+    if value["decryption_owner"] != "client":
+        raise ValidationError(f"{label}.decryption_owner must be client")
+    if not _json_equal(value, expected):
+        raise ValidationError(
+            f"{label} metadata differs from the frozen M4 checkpoint contract"
+        )
+    return value
+
+
+def _verify_m4_diagnostic_record(
+    diagnostic: Any,
+    target: dict[str, Any],
+    label: str,
+) -> dict[str, Any]:
+    value = _require_exact_object_keys(diagnostic, M4_DIAGNOSTIC_KEYS, label)
+    expected = {
+        "test": "openfhe_encoder_layer_smoke",
+        "profile": target["profile"],
+        "security_claim": target["security_claim"],
+        "parameter_sha256": target["parameter_sha256"],
+        "layer": target["layer_id"],
+        "input_level": target["input_level"],
+        "tokens": target["actual_trace_shape"][0],
+        "hidden_size": target["actual_trace_shape"][1],
+        "intermediate_size": 3072,
+        "feature_block": target["feature_block_size"],
+        "final_level": target["output_level"],
+        "final_remaining_levels": target["remaining_levels"],
+        "multiplicative_depth": target["multiplicative_depth"],
+        "max_observed_level": target["max_observed_level"],
+        "max_polynomial_depth": target["max_polynomial_depth"],
+    }
+    for key, expected_value in expected.items():
+        if value[key] != expected_value:
+            raise ValidationError(
+                f"{label}.{key} mismatch: expected={expected_value!r} "
+                f"actual={value[key]!r}"
+            )
+    for field in M4_PHASE_LATENCY_FIELDS:
+        _require_finite_number(value[field], f"{label}.{field}", 0.0, math.inf)
+    for field in (
+        "relative_l2",
+        "max_absolute",
+        "exact_trace_relative_l2",
+        "exact_trace_max_absolute",
+        "inactive_max_absolute",
+    ):
+        _require_finite_number(value[field], f"{label}.{field}", 0.0, math.inf)
+    for field in ("cosine", "exact_trace_cosine"):
+        _require_finite_number(
+            value[field], f"{label}.{field}", -1.000000000001, 1.000000000001
+        )
+    peak_rss_bytes = value["peak_rss_bytes"]
+    if (
+        not isinstance(peak_rss_bytes, int)
+        or isinstance(peak_rss_bytes, bool)
+        or peak_rss_bytes <= 0
+    ):
+        raise ValidationError(f"{label}.peak_rss_bytes must be a positive integer")
+    for field in (
+        "rotations",
+        "ct_pt_multiplications",
+        "ct_ct_multiplications",
+        "explicit_rescale_requests",
+        "chebyshev_evaluations",
+        "estimated_polynomial_multiplications",
+        "bootstraps",
+        "bootstrap_iterations",
+    ):
+        count = value[field]
+        if not isinstance(count, int) or isinstance(count, bool) or count <= 0:
+            raise ValidationError(f"{label}.{field} must be a positive integer")
+
+    for diagnostic_key, target_key in {
+        "relative_l2": "relative_l2",
+        "cosine": "cosine",
+        "inactive_max_absolute": "inactive_max_abs",
+    }.items():
+        if not math.isclose(
+            float(value[diagnostic_key]),
+            float(target[target_key]),
+            rel_tol=1e-12,
+            abs_tol=1e-15,
+        ):
+            raise ValidationError(
+                f"{label}.{diagnostic_key} differs from the target runtime record"
+            )
+    for key in ENCODER_OPERATION_COUNT_KEYS:
+        if value[key] != target["operation_counts"][key]:
+            raise ValidationError(
+                f"{label}.{key} differs from the target runtime record"
+            )
+    return value
+
+
+def _read_encoder_metrics_csv(
+    path: Path,
+    repeat_count: int,
+    runtime_records: list[dict[str, Any]],
+    m4_diagnostics: list[dict[str, Any]],
+) -> tuple[list[float], list[int], dict[str, list[float]]]:
+    expected_columns = {
+        "run",
+        "exit_code",
+        "elapsed_seconds",
+        "peak_rss_kib",
+        "final_rel_l2",
+        "final_cosine",
+        "inactive_max_abs",
+        "multiplicative_depth",
+        "max_observed_level",
+        "max_polynomial_depth",
+        "checkpoint_metadata_sha256",
+        "bootstraps",
+        "bootstrap_iterations",
+        *M4_PHASE_LATENCY_FIELDS,
+        "batch_total_ms",
+        "batch_amortized_ms_per_token",
+        "server_amortized_ms_per_token",
+    }
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if reader.fieldnames is None or set(reader.fieldnames) != expected_columns:
+                actual = set(reader.fieldnames or [])
+                raise ValidationError(
+                    f"metrics.csv columns differ: missing={sorted(expected_columns - actual)} "
+                    f"extra={sorted(actual - expected_columns)}"
+                )
+            rows = list(reader)
+    except (OSError, UnicodeError, csv.Error) as error:
+        raise ValidationError(f"cannot read metrics.csv: {error}") from error
+    if len(rows) != repeat_count:
+        raise ValidationError("metrics.csv row count differs from workload.repeat_count")
+
+    elapsed_values: list[float] = []
+    peak_rss_values: list[int] = []
+    m4_latency_values = {
+        **{field: [] for field in M4_PHASE_LATENCY_FIELDS},
+        "batch_total_ms": [],
+        "batch_amortized_ms_per_token": [],
+        "server_amortized_ms_per_token": [],
+    }
+    for index, (row, runtime) in enumerate(zip(rows, runtime_records), start=1):
+        counts = runtime["operation_counts"]
+        expected = {
+            "final_rel_l2": runtime["relative_l2"],
+            "final_cosine": runtime["cosine"],
+            "inactive_max_abs": runtime["inactive_max_abs"],
+            "bootstraps": counts["bootstraps"],
+            "bootstrap_iterations": counts["bootstrap_iterations"],
+        }
+        try:
+            if int(row["run"]) != index or int(row["exit_code"]) != 0:
+                raise ValueError("run sequence or exit code")
+            elapsed = float(row["elapsed_seconds"])
+            peak_rss = int(row["peak_rss_kib"])
+            if not math.isfinite(elapsed) or elapsed <= 0.0 or peak_rss <= 0:
+                raise ValueError("resource metrics")
+            for key, expected_value in expected.items():
+                actual_value = float(row[key])
+                if not math.isfinite(actual_value) or not math.isclose(
+                    actual_value,
+                    float(expected_value),
+                    rel_tol=1e-12,
+                    abs_tol=1e-15,
+                ):
+                    raise ValueError(f"{key} differs from stdout")
+            for key in (
+                "multiplicative_depth",
+                "max_observed_level",
+                "max_polynomial_depth",
+            ):
+                if int(row[key]) != runtime[key]:
+                    raise ValueError(f"{key} differs from stdout")
+            expected_checkpoint_hash = checkpoint_metadata_sha256(
+                runtime["checkpoints"]
+            )
+            if row["checkpoint_metadata_sha256"] != expected_checkpoint_hash:
+                raise ValueError(
+                    "checkpoint_metadata_sha256 differs from stdout"
+                )
+            if expected_checkpoint_hash != M4_CHECKPOINT_METADATA_SHA256:
+                raise ValueError("stdout checkpoint metadata hash is not frozen")
+            diagnostic = m4_diagnostics[index - 1]
+            if diagnostic["peak_rss_bytes"] > peak_rss * 1024:
+                raise ValueError("stdout diagnostic peak RSS exceeds peak_rss_kib")
+            phase_values: dict[str, float] = {}
+            for field in M4_PHASE_LATENCY_FIELDS:
+                phase_value = float(row[field])
+                if not math.isfinite(phase_value) or phase_value < 0.0:
+                    raise ValueError(f"{field} is not finite and nonnegative")
+                if not math.isclose(
+                    phase_value,
+                    float(diagnostic[field]),
+                    rel_tol=1e-12,
+                    abs_tol=1e-12,
+                ):
+                    raise ValueError(f"{field} differs from stdout diagnostic")
+                phase_values[field] = phase_value
+            derived_values = {
+                "batch_total_ms": elapsed * 1000.0,
+                "batch_amortized_ms_per_token": (
+                    elapsed * 1000.0 / M4_TOKENS_PER_BATCH
+                ),
+                "server_amortized_ms_per_token": (
+                    phase_values["server_online_ms"] / M4_TOKENS_PER_BATCH
+                ),
+            }
+            for field, expected_value in derived_values.items():
+                actual_value = float(row[field])
+                if (
+                    not math.isfinite(actual_value)
+                    or actual_value < 0.0
+                    or not math.isclose(
+                        actual_value,
+                        expected_value,
+                        rel_tol=1e-12,
+                        abs_tol=1e-12,
+                    )
+                ):
+                    raise ValueError(f"{field} differs from its source metric")
+                m4_latency_values[field].append(actual_value)
+            for field, value in phase_values.items():
+                m4_latency_values[field].append(value)
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValidationError(f"metrics.csv row {index} is invalid: {error}") from error
+        elapsed_values.append(elapsed)
+        peak_rss_values.append(peak_rss)
+    return elapsed_values, peak_rss_values, m4_latency_values
+
+
+def _verify_timing_and_repeat_metrics(
+    manifest: dict[str, Any],
+    elapsed_values: list[float],
+    peak_rss_values: list[int],
+) -> None:
+    workload = manifest["workload"]
+    metrics = manifest["metrics"]
+    if workload["repeat_count"] != 5:
+        raise ValidationError(
+            f"{manifest['milestone']} evidence requires exactly five measured repeats"
+        )
+    if (
+        metrics["repeat_count"] != 5
+        or metrics["successful_repeats"] != 5
+        or metrics["warmup_count"] != 1
+    ):
+        raise ValidationError("encoder metrics require one warm-up and five successful repeats")
+    expected_timing = {
+        "minimum": min(elapsed_values),
+        "median": statistics.median(elapsed_values),
+        "maximum": max(elapsed_values),
+    }
+    for key, expected in expected_timing.items():
+        actual = metrics["elapsed_seconds"][key]
+        if not math.isclose(actual, expected, rel_tol=1e-12, abs_tol=1e-15):
+            raise ValidationError(f"metrics.elapsed_seconds.{key} differs from metrics.csv")
+    if metrics["peak_rss_kib_max"] != max(peak_rss_values):
+        raise ValidationError("metrics.peak_rss_kib_max differs from metrics.csv")
+
+
+def _verify_latency_summary(
+    value: Any,
+    samples: list[float],
+    label: str,
+) -> None:
+    summary = _require_exact_object_keys(
+        value, {"minimum", "median", "maximum"}, label
+    )
+    expected = {
+        "minimum": min(samples),
+        "median": statistics.median(samples),
+        "maximum": max(samples),
+    }
+    for key, expected_value in expected.items():
+        actual_value = _require_finite_number(
+            summary[key], f"{label}.{key}", 0.0, math.inf
+        )
+        if not math.isclose(
+            actual_value,
+            expected_value,
+            rel_tol=1e-12,
+            abs_tol=1e-12,
+        ):
+            raise ValidationError(f"{label}.{key} differs from metrics.csv")
+
+
+def _verify_m4_latency_metrics(
+    metrics: dict[str, Any],
+    latency_values: dict[str, list[float]],
+) -> None:
+    if metrics["tokens_per_batch"] != M4_TOKENS_PER_BATCH:
+        raise ValidationError(
+            f"M4 metrics.tokens_per_batch must be {M4_TOKENS_PER_BATCH}"
+        )
+    phase_metrics = _require_exact_object_keys(
+        metrics["phase_latency_ms"],
+        set(M4_PHASE_LATENCY_FIELDS),
+        "M4 metrics.phase_latency_ms",
+    )
+    for field in M4_PHASE_LATENCY_FIELDS:
+        _verify_latency_summary(
+            phase_metrics[field],
+            latency_values[field],
+            f"M4 metrics.phase_latency_ms.{field}",
+        )
+    for field in (
+        "batch_total_ms",
+        "batch_amortized_ms_per_token",
+        "server_amortized_ms_per_token",
+    ):
+        _verify_latency_summary(
+            metrics[field], latency_values[field], f"M4 metrics.{field}"
+        )
+
+
+def _verify_m4_runtime_evidence(
+    manifest: dict[str, Any],
+    artifact_root: Path,
+) -> None:
+    workload = manifest["workload"]
+    records = _parse_runtime_records(
+        artifact_root / "stdout.log", "openfhe_encoder_layer"
+    )
+    diagnostics = _parse_runtime_records(
+        artifact_root / "stdout.log", "openfhe_encoder_layer_smoke"
+    )
+    if len(records) != workload["repeat_count"]:
+        raise ValidationError(
+            "stdout M4 record count differs from workload.repeat_count: "
+            f"records={len(records)} repeats={workload['repeat_count']}"
+        )
+    if len(diagnostics) != workload["repeat_count"]:
+        raise ValidationError(
+            "stdout M4 diagnostic count differs from workload.repeat_count: "
+            f"records={len(diagnostics)} repeats={workload['repeat_count']}"
+        )
+    profile = manifest["profile"]
+    execution = manifest["contracts"]["execution"]
+
+    record_keys = {
+        "test",
+        "profile",
+        "security_claim",
+        "parameter_sha256",
+        "execution_mode",
+        "encoder_layers",
+        "layer_id",
+        "input_level",
+        "output_level",
+        "remaining_levels",
+        "multiplicative_depth",
+        "max_observed_level",
+        "max_polynomial_depth",
+        "actual_trace_shape",
+        "actual_trace_value_count",
+        "feature_block_size",
+        "checkpoint_decryption_owner",
+        "server_private_key_present",
+        "server_decryptions",
+        "server_plaintext_activations",
+        "relative_l2",
+        "cosine",
+        "inactive_max_abs",
+        "checkpoints",
+        "operation_counts",
+    }
+    per_record_checkpoints: list[list[dict[str, Any]]] = []
+    first_counts: dict[str, int] | None = None
+    for index, record in enumerate(records, start=1):
+        label = f"stdout M4 runtime record {index}"
+        _require_exact_object_keys(record, record_keys, label)
+        _verify_encoder_runtime_identity(record, profile, execution, label)
+        if (
+            record["encoder_layers"] != 1
+            or not isinstance(record["layer_id"], int)
+            or isinstance(record["layer_id"], bool)
+            or record["layer_id"] != M4_LAYER_ID
+        ):
+            raise ValidationError(f"{label}: layer identity differs from M4 contract")
+        expected_levels = {
+            "input_level": M4_INPUT_LEVEL,
+            "output_level": M4_OUTPUT_LEVEL,
+            "remaining_levels": M4_REMAINING_LEVELS,
+        }
+        for key, expected in expected_levels.items():
+            if (
+                not isinstance(record[key], int)
+                or isinstance(record[key], bool)
+                or record[key] != expected
+            ):
+                raise ValidationError(
+                    f"{label}.{key} must be {expected}, got {record[key]!r}"
+                )
+        _require_finite_number(
+            record["relative_l2"],
+            f"{label}.relative_l2",
+            0.0,
+            M4_EXPECTED_THRESHOLDS["relative_l2_max"],
+        )
+        _require_finite_number(
+            record["cosine"],
+            f"{label}.cosine",
+            M4_EXPECTED_THRESHOLDS["cosine_min"],
+            1.000000000001,
+        )
+        _require_finite_number(
+            record["inactive_max_abs"],
+            f"{label}.inactive_max_abs",
+            0.0,
+            M4_EXPECTED_THRESHOLDS["inactive_max_abs"],
+        )
+        checkpoints = record["checkpoints"]
+        if not isinstance(checkpoints, list) or len(checkpoints) != len(
+            M4_CHECKPOINT_NAMES
+        ):
+            raise ValidationError(f"{label}: checkpoints must contain the four frozen sites")
+        verified_checkpoints = [
+            _verify_checkpoint(
+                checkpoint,
+                expected_checkpoint,
+                f"{label}.checkpoints[{checkpoint_index}]",
+            )
+            for checkpoint_index, (checkpoint, expected_checkpoint) in enumerate(
+                zip(checkpoints, M4_EXPECTED_CHECKPOINTS)
+            )
+        ]
+        checkpoint_hash = checkpoint_metadata_sha256(verified_checkpoints)
+        if checkpoint_hash != M4_CHECKPOINT_METADATA_SHA256:
+            raise ValidationError(
+                f"{label}.checkpoints canonical SHA-256 differs from the frozen contract"
+            )
+        per_record_checkpoints.append(verified_checkpoints)
+        counts = _verify_encoder_operation_counts(
+            record["operation_counts"],
+            f"{label}.operation_counts",
+            ENCODER_ROTATIONS_PER_LAYER,
+            ENCODER_BOOTSTRAPS_PER_LAYER,
+            ENCODER_BOOTSTRAP_ITERATIONS_PER_LAYER,
+        )
+        if first_counts is None:
+            first_counts = counts
+        elif counts != first_counts:
+            raise ValidationError("M4 operation counts differ across repeats")
+        _verify_m4_diagnostic_record(
+            diagnostics[index - 1], record, f"stdout M4 diagnostic record {index}"
+        )
+
+    elapsed, peak_rss, latency_values = _read_encoder_metrics_csv(
+        artifact_root / "metrics.csv",
+        workload["repeat_count"],
+        records,
+        diagnostics,
+    )
+    _verify_timing_and_repeat_metrics(manifest, elapsed, peak_rss)
+    metrics = _require_exact_object_keys(
+        manifest["metrics"],
+        {
+            "repeat_count",
+            "successful_repeats",
+            "warmup_count",
+            "elapsed_seconds",
+            "tokens_per_batch",
+            "phase_latency_ms",
+            "batch_total_ms",
+            "batch_amortized_ms_per_token",
+            "server_amortized_ms_per_token",
+            "peak_rss_kib_max",
+            "actual_trace_shape",
+            "actual_trace_value_count",
+            "feature_block_size",
+            "input_level",
+            "output_level",
+            "remaining_levels",
+            "multiplicative_depth",
+            "max_observed_level",
+            "max_polynomial_depth",
+            "quality",
+            "checkpoints",
+            "checkpoint_metadata_sha256",
+            "operation_counts",
+        },
+        "M4 metrics",
+    )
+    _verify_m4_latency_metrics(metrics, latency_values)
+    if (
+        metrics["actual_trace_shape"] != ENCODER_TRACE_SHAPE
+        or metrics["actual_trace_value_count"] != ENCODER_TRACE_VALUE_COUNT
+        or metrics["feature_block_size"] != ENCODER_FEATURE_BLOCK_SIZE
+    ):
+        raise ValidationError("M4 metrics trace shape or feature block changed")
+    expected_metric_levels = {
+        "input_level": M4_INPUT_LEVEL,
+        "output_level": M4_OUTPUT_LEVEL,
+        "remaining_levels": M4_REMAINING_LEVELS,
+    }
+    for key, expected in expected_metric_levels.items():
+        if metrics[key] != expected or any(record[key] != expected for record in records):
+            raise ValidationError(f"M4 metrics.{key} violates the frozen schedule")
+    expected_depth_metrics = {
+        "multiplicative_depth": M4_MULTIPLICATIVE_DEPTH,
+        "max_observed_level": M4_MAX_OBSERVED_LEVEL,
+        "max_polynomial_depth": M4_MAX_POLYNOMIAL_DEPTH,
+    }
+    for key, expected in expected_depth_metrics.items():
+        if metrics[key] != expected or any(record[key] != expected for record in records):
+            raise ValidationError(f"M4 metrics.{key} violates the frozen depth contract")
+    expected_quality = {
+        "relative_l2_max": max(record["relative_l2"] for record in records),
+        "cosine_min": min(record["cosine"] for record in records),
+        "inactive_max_abs_max": max(record["inactive_max_abs"] for record in records),
+    }
+    if not _json_equal(metrics["quality"], expected_quality):
+        raise ValidationError("M4 metrics.quality differs from stdout")
+    expected_checkpoints = []
+    for checkpoint_index, name in enumerate(M4_CHECKPOINT_NAMES):
+        values = [items[checkpoint_index] for items in per_record_checkpoints]
+        counts = {item["ciphertext_count"] for item in values}
+        if len(counts) != 1:
+            raise ValidationError(f"M4 checkpoint {name} ciphertext count changed")
+        expected_checkpoints.append(
+            {
+                "name": name,
+                "level_min": min(item["level"] for item in values),
+                "level_max": max(item["level"] for item in values),
+                "noise_scale_degree_min": min(
+                    item["noise_scale_degree"] for item in values
+                ),
+                "noise_scale_degree_max": max(
+                    item["noise_scale_degree"] for item in values
+                ),
+                "remaining_levels_min": min(
+                    item["remaining_levels"] for item in values
+                ),
+                "remaining_levels_max": max(
+                    item["remaining_levels"] for item in values
+                ),
+                "scale_bits_min": min(item["scale_bits"] for item in values),
+                "scale_bits_max": max(item["scale_bits"] for item in values),
+                "ciphertext_count": next(iter(counts)),
+                "decryption_owner": "client",
+            }
+        )
+    if not _json_equal(metrics["checkpoints"], expected_checkpoints):
+        raise ValidationError("M4 metrics.checkpoints differs from stdout")
+    if metrics["checkpoint_metadata_sha256"] != M4_CHECKPOINT_METADATA_SHA256:
+        raise ValidationError(
+            "M4 metrics.checkpoint_metadata_sha256 violates the frozen contract"
+        )
+    assert first_counts is not None
+    if metrics["operation_counts"] != first_counts:
+        raise ValidationError("M4 metrics.operation_counts differs from stdout")
+
+
+def _verify_checksum_evidence(
+    artifact_root: Path, artifact_records: dict[str, dict[str, Any]]
+) -> None:
+    checksum_path = artifact_root / "SHA256SUMS"
+    checksum_entries: dict[str, str] = {}
+    try:
+        checksum_lines = checksum_path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        raise ValidationError(f"cannot read SHA256SUMS: {error}") from error
+    for line in checksum_lines:
+        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9._+-]+)", line)
+        if match is None or match.group(2) in checksum_entries:
+            raise ValidationError(f"invalid or duplicate SHA256SUMS line: {line!r}")
+        checksum_entries[match.group(2)] = match.group(1)
+    if set(checksum_entries) != {"stdout.log", "metrics.csv"}:
+        raise ValidationError(
+            "SHA256SUMS must cover exactly stdout.log and metrics.csv, not itself/manifest"
+        )
+    for path in checksum_entries:
+        if checksum_entries[path] != artifact_records[path]["sha256"]:
+            raise ValidationError(f"SHA256SUMS digest disagrees for {path}")
+
+
 def _verify_runtime_evidence(
     manifest: dict[str, Any],
     repository_root: Path,
@@ -746,6 +2092,10 @@ def _verify_runtime_evidence(
         },
         "workload executable",
     )
+    if manifest["milestone"] == "M4":
+        _verify_m4_runtime_evidence(manifest, artifact_root)
+        _verify_checksum_evidence(artifact_root, artifact_records)
+        return
     if manifest["milestone"] == "M3" and workload["repeat_count"] < 3:
         raise ValidationError("M3 evidence requires at least three independent repeats")
 
@@ -972,24 +2322,7 @@ def _verify_runtime_evidence(
     ):
         raise ValidationError("manifest maximum observed level is invalid")
 
-    checksum_path = artifact_root / "SHA256SUMS"
-    checksum_entries: dict[str, str] = {}
-    try:
-        checksum_lines = checksum_path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeError) as error:
-        raise ValidationError(f"cannot read SHA256SUMS: {error}") from error
-    for line in checksum_lines:
-        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9._+-]+)", line)
-        if match is None or match.group(2) in checksum_entries:
-            raise ValidationError(f"invalid or duplicate SHA256SUMS line: {line!r}")
-        checksum_entries[match.group(2)] = match.group(1)
-    if set(checksum_entries) != {"stdout.log", "metrics.csv"}:
-        raise ValidationError(
-            "SHA256SUMS must cover exactly stdout.log and metrics.csv, not itself/manifest"
-        )
-    for path in checksum_entries:
-        if checksum_entries[path] != artifact_records[path]["sha256"]:
-            raise ValidationError(f"SHA256SUMS digest disagrees for {path}")
+    _verify_checksum_evidence(artifact_root, artifact_records)
 
 
 def validate_manifest(
@@ -1026,7 +2359,8 @@ def validate_manifest(
             repository_root, record["path"], f"inputs[{index}].path"
         )
         _verify_file_record(input_path, record, f"inputs[{index}]")
-    _verify_m3_contract_bindings(manifest, repository_root, input_records)
+    _verify_contract_bindings(manifest, repository_root, input_records)
+    _verify_m4_go_command_transcript(manifest, manifest_path)
 
     artifact_root = manifest_path.resolve().parent
     artifact_paths: set[str] = set()

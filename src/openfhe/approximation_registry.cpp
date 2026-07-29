@@ -43,9 +43,35 @@ ApproximationContract MakeChebyshevContract(
     return contract;
 }
 
-double EvaluateChebyshevAt(
+void ConstrainZeroAtOrigin(ApproximationContract& contract) {
+    if (contract.interval.minimum > 0.0 || contract.interval.maximum < 0.0) {
+        throw std::logic_error(
+            "zero-at-origin constraint requires an interval containing zero");
+    }
+    const double raw_at_origin = EvaluateChebyshevContractAt(contract, 0.0);
+    contract.coefficients[0] -= 2.0 * raw_at_origin;
+    if (std::abs(EvaluateChebyshevContractAt(contract, 0.0)) > 1e-12) {
+        throw std::logic_error(
+            "zero-at-origin Chebyshev correction exceeded its oracle gate");
+    }
+    RefreshCoefficientHash(contract);
+}
+
+}  // namespace
+
+double EvaluateChebyshevContractAt(
     const ApproximationContract& contract,
     double input) {
+    if (contract.basis != "chebyshev" ||
+        contract.coefficients.size() !=
+            static_cast<std::size_t>(contract.degree) + 1 ||
+        !std::isfinite(input) ||
+        !std::isfinite(contract.interval.minimum) ||
+        !std::isfinite(contract.interval.maximum) ||
+        contract.interval.minimum >= contract.interval.maximum) {
+        throw std::invalid_argument(
+            "Chebyshev plaintext-oracle contract is malformed");
+    }
     const double normalized =
         (2.0 * input - contract.interval.minimum - contract.interval.maximum) /
         (contract.interval.maximum - contract.interval.minimum);
@@ -61,24 +87,12 @@ double EvaluateChebyshevAt(
         previous = current;
         current = next;
     }
+    if (!std::isfinite(result)) {
+        throw std::runtime_error(
+            "Chebyshev plaintext-oracle evaluation is non-finite");
+    }
     return result;
 }
-
-void ConstrainZeroAtOrigin(ApproximationContract& contract) {
-    if (contract.interval.minimum > 0.0 || contract.interval.maximum < 0.0) {
-        throw std::logic_error(
-            "zero-at-origin constraint requires an interval containing zero");
-    }
-    const double raw_at_origin = EvaluateChebyshevAt(contract, 0.0);
-    contract.coefficients[0] -= 2.0 * raw_at_origin;
-    if (std::abs(EvaluateChebyshevAt(contract, 0.0)) > 1e-12) {
-        throw std::logic_error(
-            "zero-at-origin Chebyshev correction exceeded its oracle gate");
-    }
-    RefreshCoefficientHash(contract);
-}
-
-}  // namespace
 
 std::string ComputeCoefficientSha256(
     const std::vector<double>& coefficients) {
