@@ -42,11 +42,23 @@ int main() {
     try {
         auto profile = moai::openfhe::MakePaperCompatProfile();
         moai::openfhe::PrintSecurityDisclosure(profile, std::cout);
-        auto context = moai::openfhe::MakeCryptoContext(profile);
-
+        auto missing_warning_profile = profile;
+        missing_warning_profile.warning.clear();
+        bool missing_warning_rejected = false;
+        try {
+            static_cast<void>(
+                moai::openfhe::MakeCryptoContext(missing_warning_profile));
+        }
+        catch (const std::invalid_argument&) {
+            missing_warning_rejected = true;
+        }
+        if (!missing_warning_rejected) {
+            throw std::runtime_error(
+                "paper_compat accepted a missing security warning");
+        }
         moai::openfhe::PackingSpec packing;
         packing.layout = moai::openfhe::PackingLayout::kContiguous;
-        packing.logical_shape = {8};
+        packing.logical_shape = {8, 1};
         packing.batch_lanes = 1;
         packing.slot_count = profile.slot_count;
         packing.encoded_slots = profile.slot_count;
@@ -68,11 +80,59 @@ int main() {
         moai::openfhe::RunMetrics metrics;
 
         {
-            moai::openfhe::ClientRuntime client(context, profile);
+            moai::openfhe::ClientRuntime client(profile);
             client.GenerateEvaluationKeys({1}, false);
+            auto mismatched_profile = profile;
+            moai::openfhe::ConfigureBootstrap(
+                mismatched_profile,
+                8,
+                2);
+            bool mismatched_bundle_profile_rejected = false;
+            try {
+                static_cast<void>(moai::openfhe::ServerRuntime(
+                    client.ExportServerKeyBundle(),
+                    mismatched_profile));
+            }
+            catch (const std::invalid_argument&) {
+                mismatched_bundle_profile_rejected = true;
+            }
+            if (!mismatched_bundle_profile_rejected) {
+                throw std::runtime_error(
+                    "server accepted a key bundle from a different CryptoProfile");
+            }
             moai::openfhe::ServerRuntime server(client.ExportServerKeyBundle(), profile);
 
+            auto mismatched_shape = packing;
+            mismatched_shape.logical_shape = {8, 2};
+            bool mismatched_shape_rejected = false;
+            try {
+                static_cast<void>(client.Encrypt({input}, mismatched_shape));
+            }
+            catch (const std::invalid_argument&) {
+                mismatched_shape_rejected = true;
+            }
+            if (!mismatched_shape_rejected) {
+                throw std::runtime_error(
+                    "client accepted a logical feature count that differs from "
+                    "the ciphertext count");
+            }
+
             const auto encrypted = client.Encrypt({input}, packing);
+            auto inconsistent_multiply_rhs = encrypted;
+            inconsistent_multiply_rhs.packing.logical_shape = {7, 1};
+            bool inconsistent_multiply_rejected = false;
+            try {
+                static_cast<void>(server.Multiply(
+                    encrypted,
+                    inconsistent_multiply_rhs));
+            }
+            catch (const std::invalid_argument&) {
+                inconsistent_multiply_rejected = true;
+            }
+            if (!inconsistent_multiply_rejected) {
+                throw std::runtime_error(
+                    "server accepted inconsistent logical multiplication metadata");
+            }
             roundtrip_error =
                 MaxAbsoluteError(client.Decrypt(encrypted).front(), input);
             RequireAtMost(roundtrip_error, 1e-6, "roundtrip");
@@ -86,7 +146,7 @@ int main() {
             RequireAtMost(rotation_error, 1e-6, "rotation");
 
             const auto encoded_weights =
-                server.EncodeModelVector(double_weights, packing);
+                server.EncodeModelVector(double_weights, encrypted.packing);
             const auto ct_pt =
                 server.MultiplyPlain(encrypted, {encoded_weights});
             auto ct_pt_expected = input;
@@ -118,7 +178,6 @@ int main() {
             }
         }
 
-        context->ClearStaticMapsAndVectors();
         std::cout << "{\"test\":\"openfhe_fast_smoke\","
                   << "\"profile\":\"paper_compat\","
                   << "\"security_claim\":\"none\","

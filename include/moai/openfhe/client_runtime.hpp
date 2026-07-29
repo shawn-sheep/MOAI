@@ -9,9 +9,7 @@ namespace moai::openfhe {
 
 class ClientRuntime {
 public:
-    ClientRuntime(
-        lbcrypto::CryptoContext<lbcrypto::DCRTPoly> context,
-        CryptoProfile profile);
+    explicit ClientRuntime(CryptoProfile profile);
 
     void GenerateEvaluationKeys(
         const std::vector<int32_t>& rotation_indices,
@@ -25,14 +23,6 @@ public:
         const CipherTensor& tensor) const;
 
     [[nodiscard]] ServerKeyBundle ExportServerKeyBundle() const;
-
-    [[nodiscard]] const lbcrypto::PublicKey<lbcrypto::DCRTPoly>& public_key() const noexcept {
-        return public_key_;
-    }
-
-    [[nodiscard]] const lbcrypto::CryptoContext<lbcrypto::DCRTPoly>& context() const noexcept {
-        return context_;
-    }
 
 private:
     lbcrypto::CryptoContext<lbcrypto::DCRTPoly> context_;

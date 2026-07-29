@@ -3,9 +3,12 @@
 #include "moai/openfhe/types.hpp"
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace moai::openfhe {
+
+class NonlinearOps;
 
 class ServerRuntime {
 public:
@@ -27,8 +30,20 @@ public:
     [[nodiscard]] CipherTensor Add(
         const CipherTensor& lhs,
         const CipherTensor& rhs);
+    [[nodiscard]] CipherTensor Subtract(
+        const CipherTensor& lhs,
+        const CipherTensor& rhs);
+    [[nodiscard]] CipherTensor AddPlain(
+        const CipherTensor& input,
+        const std::vector<std::vector<double>>& plaintexts);
+    [[nodiscard]] CipherTensor SubtractPlain(
+        const CipherTensor& input,
+        const std::vector<std::vector<double>>& plaintexts);
     [[nodiscard]] CipherTensor Sum(const CipherTensor& input);
     [[nodiscard]] CipherTensor Rescale(const CipherTensor& input);
+
+    [[nodiscard]] uint32_t RemainingLevels(
+        const CipherTensor& input) const;
 
     void PrepareBootstrap();
     [[nodiscard]] CipherTensor Bootstrap(const CipherTensor& input);
@@ -38,6 +53,16 @@ public:
     }
 
 private:
+    friend class NonlinearOps;
+
+    [[nodiscard]] CipherTensor EvaluateChebyshev(
+        const CipherTensor& input,
+        const ApproximationContract& contract);
+    void RequireUsableLevels(
+        const CipherTensor& input,
+        uint32_t required_levels,
+        const std::string& operation) const;
+
     ServerKeyBundle key_bundle_;
     lbcrypto::CryptoContext<lbcrypto::DCRTPoly> context_;
     CryptoProfile profile_;

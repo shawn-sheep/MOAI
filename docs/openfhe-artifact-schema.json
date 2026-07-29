@@ -1,73 +1,799 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://local.moai/openfhe-artifact-schema.json",
-  "title": "MOAI OpenFHE run manifest",
+  "$id": "https://local.moai/openfhe-artifact-schema-v2.json",
+  "title": "MOAI OpenFHE evidence manifest v2",
+  "description": "Strict schema used for M3 and later evidence. Historical schema_version=1 manifests are immutable legacy records and are not valid against this schema.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "run_id",
     "milestone",
+    "started_at",
+    "finished_at",
     "git",
+    "commands",
     "environment",
     "profile",
+    "inputs",
     "workload",
-    "command",
+    "contracts",
     "metrics",
+    "gate",
     "artifacts",
+    "claim_boundary",
     "verdict"
   ],
   "properties": {
-    "schema_version": { "const": 1 },
-    "run_id": { "type": "string", "minLength": 1 },
-    "milestone": { "enum": ["M0", "M1", "M2", "M3", "M4", "M5", "M6"] },
+    "schema_version": {
+      "const": 2
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:-]*$"
+    },
+    "milestone": {
+      "enum": ["M0", "M1", "M2", "M3", "M4", "M5", "M6"]
+    },
+    "started_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "finished_at": {
+      "$ref": "#/$defs/timestamp"
+    },
     "git": {
       "type": "object",
-      "required": ["commit", "branch", "dirty"],
+      "additionalProperties": false,
+      "required": ["repository_root", "branch", "local_commit", "clean"],
       "properties": {
-        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
-        "branch": { "type": "string" },
-        "dirty": { "type": "boolean" }
+        "repository_root": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "branch": {
+          "const": "refactor/openfhe-cpu"
+        },
+        "local_commit": {
+          "$ref": "#/$defs/git_sha"
+        },
+        "clean": {
+          "type": "boolean"
+        },
+        "remote_name": {
+          "const": "origin"
+        },
+        "remote_ref": {
+          "const": "refs/heads/refactor/openfhe-cpu"
+        },
+        "remote_commit": {
+          "$ref": "#/$defs/git_sha"
+        }
       }
     },
-    "environment": { "type": "object" },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "cwd", "exit_code"],
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1
+          },
+          "cwd": {
+            "type": "string",
+            "pattern": "^/"
+          },
+          "exit_code": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "phase": {
+            "enum": ["pre_commit", "post_commit", "artifact_generation"]
+          },
+          "started_at": {
+            "$ref": "#/$defs/timestamp"
+          },
+          "finished_at": {
+            "$ref": "#/$defs/timestamp"
+          }
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture",
+        "compiler",
+        "cmake",
+        "openfhe_version",
+        "openfhe_prefix"
+      ],
+      "properties": {
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compiler": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cmake": {
+          "type": "string",
+          "minLength": 1
+        },
+        "python": {
+          "type": "string",
+          "minLength": 1
+        },
+        "openfhe_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "openfhe_prefix": {
+          "type": "string",
+          "minLength": 1
+        },
+        "openfhe_source_commit": {
+          "$ref": "#/$defs/git_sha"
+        },
+        "wsl": {
+          "type": "boolean"
+        }
+      }
+    },
     "profile": {
       "type": "object",
-      "required": ["id", "security_claim", "parameter_sha256"],
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "security_claim",
+        "warning",
+        "source_config_path",
+        "source_config_sha256",
+        "source_config_bytes",
+        "effective_profile_locator",
+        "canonicalization",
+        "effective_profile_payload",
+        "effective_profile_sha256"
+      ],
       "properties": {
-        "id": { "const": "paper_compat" },
-        "security_claim": { "const": "none" },
-        "parameter_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "id": {
+          "const": "paper_compat"
+        },
+        "security_claim": {
+          "const": "none"
+        },
+        "warning": {
+          "const": "Research reproduction parameters only. Do not claim 128-bit security."
+        },
+        "source_config_path": {
+          "$ref": "#/$defs/repository_path"
+        },
+        "source_config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "source_config_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "effective_profile_locator": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/"
+        },
+        "canonicalization": {
+          "const": "MOAI-json-sort-keys-compact-utf8-v1"
+        },
+        "effective_profile_payload": {
+          "type": "object",
+          "minProperties": 1
+        },
+        "effective_profile_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
       }
     },
-    "workload": { "type": "object" },
-    "command": { "type": "string", "minLength": 1 },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/input_file"
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "backend",
+        "executable_path",
+        "executable_sha256",
+        "executable_bytes",
+        "repeat_count"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend": {
+          "const": "OpenFHE CKKS CPU"
+        },
+        "executable_path": {
+          "$ref": "#/$defs/repository_path"
+        },
+        "executable_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "executable_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "repeat_count": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approximation_config_path",
+        "approximation_config_sha256",
+        "trace_contract_path",
+        "trace_contract_sha256",
+        "profile_config_path",
+        "profile_config_sha256",
+        "softmax_shift",
+        "polynomials",
+        "thresholds"
+      ],
+      "properties": {
+        "approximation_config_path": {
+          "const": "config/openfhe_approximations.json"
+        },
+        "approximation_config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "trace_contract_path": {
+          "const": "config/moai_trace_channel_scales.json"
+        },
+        "trace_contract_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "profile_config_path": {
+          "const": "config/paper_compat.json"
+        },
+        "profile_config_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "softmax_shift": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layer", "head", "values_sha256"],
+          "properties": {
+            "layer": {
+              "const": 1
+            },
+            "head": {
+              "const": 2
+            },
+            "values_sha256": {
+              "const": "41ecf6ade53f674096c9afc752ccfe99834876ea4768bcf4bf3ea25a8f502432"
+            }
+          }
+        },
+        "polynomials": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "gelu",
+            "softmax_exponential",
+            "softmax_reciprocal",
+            "layernorm_inverse_sqrt"
+          ],
+          "properties": {
+            "gelu": {
+              "$ref": "#/$defs/m3_gelu_polynomial"
+            },
+            "softmax_exponential": {
+              "$ref": "#/$defs/m3_softmax_exponential_polynomial"
+            },
+            "softmax_reciprocal": {
+              "$ref": "#/$defs/m3_softmax_reciprocal_polynomial"
+            },
+            "layernorm_inverse_sqrt": {
+              "$ref": "#/$defs/m3_layernorm_inverse_sqrt_polynomial"
+            }
+          }
+        },
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "relative_l2_max",
+            "cosine_min",
+            "inactive_max_abs",
+            "denominator_post_max_abs"
+          ],
+          "properties": {
+            "relative_l2_max": {
+              "const": 0.01
+            },
+            "cosine_min": {
+              "const": 0.999
+            },
+            "inactive_max_abs": {
+              "const": 0.000001
+            },
+            "denominator_post_max_abs": {
+              "const": 0.000001
+            }
+          }
+        }
+      }
+    },
     "metrics": {
       "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repeat_count",
+        "successful_repeats",
+        "elapsed_seconds",
+        "peak_rss_kib_max",
+        "quality",
+        "operation_counts",
+        "max_observed_level_max"
+      ],
       "properties": {
-        "relative_l2": { "type": "number", "minimum": 0 },
-        "cosine_similarity": { "type": "number", "minimum": -1, "maximum": 1 },
-        "max_absolute_error": { "type": "number", "minimum": 0 },
-        "latency_ms": { "type": "number", "minimum": 0 },
-        "peak_rss_bytes": { "type": "integer", "minimum": 0 },
-        "rotations": { "type": "integer", "minimum": 0 },
-        "ct_pt_multiplications": { "type": "integer", "minimum": 0 },
-        "ct_ct_multiplications": { "type": "integer", "minimum": 0 },
-        "multiplicative_depth": { "type": "integer", "minimum": 0 },
-        "bootstraps": { "type": "integer", "minimum": 0 }
+        "repeat_count": {
+          "type": "integer",
+          "minimum": 3
+        },
+        "successful_repeats": {
+          "type": "integer",
+          "minimum": 3
+        },
+        "elapsed_seconds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum", "median", "maximum"],
+          "properties": {
+            "minimum": {
+              "type": "number",
+              "minimum": 0
+            },
+            "median": {
+              "type": "number",
+              "minimum": 0
+            },
+            "maximum": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "peak_rss_kib_max": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "gelu_rel_l2_max",
+            "ffn_rel_l2_max",
+            "softmax_rel_l2_max",
+            "layernorm_rel_l2_max",
+            "gelu_cosine_min",
+            "ffn_cosine_min",
+            "softmax_cosine_min",
+            "layernorm_cosine_min",
+            "inactive_max_abs_max",
+            "denominator_post_max_abs_max"
+          ],
+          "properties": {
+            "gelu_rel_l2_max": {
+              "$ref": "#/$defs/m3_relative_l2"
+            },
+            "ffn_rel_l2_max": {
+              "$ref": "#/$defs/m3_relative_l2"
+            },
+            "softmax_rel_l2_max": {
+              "$ref": "#/$defs/m3_relative_l2"
+            },
+            "layernorm_rel_l2_max": {
+              "$ref": "#/$defs/m3_relative_l2"
+            },
+            "gelu_cosine_min": {
+              "$ref": "#/$defs/m3_cosine"
+            },
+            "ffn_cosine_min": {
+              "$ref": "#/$defs/m3_cosine"
+            },
+            "softmax_cosine_min": {
+              "$ref": "#/$defs/m3_cosine"
+            },
+            "layernorm_cosine_min": {
+              "$ref": "#/$defs/m3_cosine"
+            },
+            "inactive_max_abs_max": {
+              "$ref": "#/$defs/m3_small_error"
+            },
+            "denominator_post_max_abs_max": {
+              "$ref": "#/$defs/m3_small_error"
+            }
+          }
+        },
+        "operation_counts": {
+          "$ref": "#/$defs/m3_operation_counts"
+        },
+        "max_observed_level_max": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "decision", "checks"],
+      "properties": {
+        "passed": {
+          "type": "boolean"
+        },
+        "decision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checks": {
+          "type": "object",
+          "required": [
+            "build",
+            "trust_boundary",
+            "correctness",
+            "repeatability",
+            "artifact_integrity",
+            "remote_sha"
+          ],
+          "properties": {
+            "build": {
+              "$ref": "#/$defs/gate_status"
+            },
+            "trust_boundary": {
+              "$ref": "#/$defs/gate_status"
+            },
+            "correctness": {
+              "$ref": "#/$defs/gate_status"
+            },
+            "repeatability": {
+              "$ref": "#/$defs/gate_status"
+            },
+            "artifact_integrity": {
+              "$ref": "#/$defs/gate_status"
+            },
+            "remote_sha": {
+              "$ref": "#/$defs/gate_status"
+            }
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/gate_status"
+          }
+        }
       }
     },
     "artifacts": {
       "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
       "items": {
-        "type": "object",
-        "required": ["path", "sha256"],
-        "properties": {
-          "path": { "type": "string" },
-          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "$ref": "#/$defs/artifact_file"
+      }
+    },
+    "claim_boundary": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "verdict": {
+      "enum": ["GO", "NO-GO", "BLOCKED", "SOURCE_AUDIT_ONLY"]
+    }
+  },
+  "$defs": {
+    "m3_gelu_polynomial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "degree",
+        "interval",
+        "required_depth",
+        "estimated_multiplications",
+        "coefficient_sha256"
+      ],
+      "properties": {
+        "degree": {
+          "const": 319
+        },
+        "interval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum", "maximum"],
+          "properties": {
+            "minimum": {
+              "const": -80.0
+            },
+            "maximum": {
+              "const": 128.0
+            }
+          }
+        },
+        "required_depth": {
+          "const": 10
+        },
+        "estimated_multiplications": {
+          "const": 33
+        },
+        "coefficient_sha256": {
+          "const": "35d68b2f56f267f27e8f962c3bd54cddd90892349b77405172f48987864eaaa3"
         }
       }
     },
-    "verdict": { "enum": ["GO", "NO-GO", "BLOCKED", "SOURCE_AUDIT_ONLY"] }
+    "m3_softmax_exponential_polynomial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "degree",
+        "interval",
+        "required_depth",
+        "estimated_multiplications",
+        "coefficient_sha256"
+      ],
+      "properties": {
+        "degree": {
+          "const": 27
+        },
+        "interval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum", "maximum"],
+          "properties": {
+            "minimum": {
+              "const": -16.0
+            },
+            "maximum": {
+              "const": 5.0
+            }
+          }
+        },
+        "required_depth": {
+          "const": 6
+        },
+        "estimated_multiplications": {
+          "const": 10
+        },
+        "coefficient_sha256": {
+          "const": "6eda4377151897e8c4ca4d72f2a918db0b888fc6771f8ee5cf1d950b378de76f"
+        }
+      }
+    },
+    "m3_softmax_reciprocal_polynomial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "degree",
+        "interval",
+        "required_depth",
+        "estimated_multiplications",
+        "coefficient_sha256"
+      ],
+      "properties": {
+        "degree": {
+          "const": 383
+        },
+        "interval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum", "maximum"],
+          "properties": {
+            "minimum": {
+              "const": 0.01
+            },
+            "maximum": {
+              "const": 80.0
+            }
+          }
+        },
+        "required_depth": {
+          "const": 10
+        },
+        "estimated_multiplications": {
+          "const": 35
+        },
+        "coefficient_sha256": {
+          "const": "fa97f298751bca97f40eed3b6de949262d1b3971cda57013b55420d5c9fbbeb3"
+        }
+      }
+    },
+    "m3_layernorm_inverse_sqrt_polynomial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "degree",
+        "interval",
+        "required_depth",
+        "estimated_multiplications",
+        "coefficient_sha256"
+      ],
+      "properties": {
+        "degree": {
+          "const": 159
+        },
+        "interval": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum", "maximum"],
+          "properties": {
+            "minimum": {
+              "const": 0.5
+            },
+            "maximum": {
+              "const": 1536.0
+            }
+          }
+        },
+        "required_depth": {
+          "const": 9
+        },
+        "estimated_multiplications": {
+          "const": 23
+        },
+        "coefficient_sha256": {
+          "const": "28d0ffd36436228da4ee6023e0aad7641be995492a4314375b5a1aafe68465be"
+        }
+      }
+    },
+    "m3_relative_l2": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 0.01
+    },
+    "m3_cosine": {
+      "type": "number",
+      "minimum": 0.999,
+      "maximum": 1.000000000001
+    },
+    "m3_small_error": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 0.000001
+    },
+    "m3_operation_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rotations",
+        "ct_pt_multiplications",
+        "ct_ct_multiplications",
+        "rescale_operations",
+        "bootstraps",
+        "bootstrap_iterations",
+        "chebyshev_evaluations",
+        "estimated_polynomial_multiplications",
+        "max_polynomial_depth"
+      ],
+      "properties": {
+        "rotations": {
+          "const": 0
+        },
+        "ct_pt_multiplications": {
+          "const": 19
+        },
+        "ct_ct_multiplications": {
+          "const": 10
+        },
+        "rescale_operations": {
+          "const": 28
+        },
+        "bootstraps": {
+          "const": 3
+        },
+        "bootstrap_iterations": {
+          "const": 6
+        },
+        "chebyshev_evaluations": {
+          "const": 5
+        },
+        "estimated_polynomial_multiplications": {
+          "const": 111
+        },
+        "max_polynomial_depth": {
+          "const": 10
+        }
+      }
+    },
+    "gate_status": {
+      "enum": ["PASS", "FAIL", "SKIPPED", "NOT_RUN"]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "git_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "repository_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "input_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "media_type", "role"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repository_path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "media_type": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+        },
+        "role": {
+          "enum": ["source", "configuration", "dataset", "weights", "trace", "contract", "other"]
+        }
+      }
+    },
+    "artifact_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "media_type", "role"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repository_path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "media_type": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+        },
+        "role": {
+          "enum": ["stdout", "metrics", "checksum", "benchmark", "supporting_evidence", "other"]
+        }
+      }
+    }
   }
 }

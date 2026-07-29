@@ -20,9 +20,26 @@ No result from this profile supports a 128-bit security claim.
 - The client owns plaintext activations and the OpenFHE `PrivateKey`.
 - The server receives ciphertexts, plaintext model weights, the public key, and only the
   evaluation keys needed by the declared operator graph.
+- `ClientRuntime` constructs the OpenFHE context from the validated effective profile;
+  callers cannot inject a raw context. The opaque evaluation-key bundle carries the
+  effective-profile hash, and `ServerRuntime` revalidates both that binding and the
+  observable CKKS context parameters before accepting work.
+- Softmax may receive one offline-frozen public scalar per layer/head as model/fixture
+  metadata. A scalar or vector derived from a runtime plaintext activation is forbidden.
+- Approximation intervals are registry-bound. Observed trace ranges are checked before
+  encryption by the offline/client validator and are never passed into a server API as
+  activation-derived metadata.
 - Server libraries and operator signatures must not contain `PrivateKey` or `Decryptor`.
 - A test server may return encrypted checkpoints. Decryption and comparison remain client
   responsibilities and cannot feed plaintext back into server computation.
+
+For contiguous and column tensors, `PackingSpec.logical_shape` is `{logical_rows,
+features}` and `features` equals the ciphertext count. A reduction over feature
+ciphertexts produces `{logical_rows,1}`. Add/Sub may broadcast only such an explicit
+one-feature right operand. Elementwise Multiply uses the same rhs broadcast; its only
+cross-layout exception is the explicitly validated diagonal-singleton times
+column-singleton step in the BSGS linear kernel. Level and scale metadata must always
+reflect the underlying OpenFHE ciphertexts.
 
 ## Gates
 

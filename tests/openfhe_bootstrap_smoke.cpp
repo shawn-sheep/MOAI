@@ -41,10 +41,9 @@ int main() {
             << "bootstrap_smoke_scope=test-only sparse 8-slot API validation; "
             << "level_budget=[2,2]; not a 32768-slot workload result\n";
 
-        auto context = moai::openfhe::MakeCryptoContext(profile);
         moai::openfhe::PackingSpec packing;
         packing.layout = moai::openfhe::PackingLayout::kContiguous;
-        packing.logical_shape = {kSmokeSlots};
+        packing.logical_shape = {kSmokeSlots, 1};
         packing.batch_lanes = 1;
         packing.slot_count = profile.slot_count;
         packing.encoded_slots = kSmokeSlots;
@@ -62,7 +61,7 @@ int main() {
         uint64_t bootstrap_count = 0;
 
         {
-            moai::openfhe::ClientRuntime client(context, profile);
+            moai::openfhe::ClientRuntime client(profile);
             client.GenerateEvaluationKeys({}, true);
             moai::openfhe::ServerRuntime server(client.ExportServerKeyBundle(), profile);
 
@@ -81,12 +80,12 @@ int main() {
                     "bootstrap did not replenish usable ciphertext levels");
             }
             bootstrap_count = server.metrics().bootstraps;
-            if (bootstrap_count != 1) {
+            if (bootstrap_count != 1 ||
+                server.metrics().bootstrap_iterations != 1) {
                 throw std::runtime_error("unexpected bootstrap operation count");
             }
         }
 
-        context->ClearStaticMapsAndVectors();
         std::cout << "{\"test\":\"openfhe_bootstrap_smoke\","
                   << "\"profile\":\"paper_compat\","
                   << "\"security_claim\":\"none\","
@@ -94,7 +93,8 @@ int main() {
                   << "\"input_level\":" << input_level << ","
                   << "\"output_level\":" << output_level << ","
                   << "\"max_abs\":" << maximum_error << ","
-                  << "\"bootstraps\":" << bootstrap_count << "}\n";
+                  << "\"bootstraps\":" << bootstrap_count << ","
+                  << "\"bootstrap_iterations\":1}\n";
         return 0;
     } catch (const std::exception& exception) {
         std::cerr << "openfhe_bootstrap_smoke failed: "

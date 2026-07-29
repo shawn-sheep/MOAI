@@ -2,19 +2,50 @@
 
 #include "moai/openfhe/context_factory.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
 namespace moai::openfhe {
+namespace {
 
-ClientRuntime::ClientRuntime(
-    lbcrypto::CryptoContext<lbcrypto::DCRTPoly> context,
-    CryptoProfile profile)
-    : context_(std::move(context)), profile_(std::move(profile)) {
-    if (!context_) {
-        throw std::invalid_argument("client context must not be null");
+bool ScalesMatch(double lhs, double rhs) {
+    if (!std::isfinite(lhs) || !std::isfinite(rhs) || lhs <= 0.0 || rhs <= 0.0) {
+        return false;
     }
+    const double magnitude =
+        std::max(1.0, std::max(std::abs(lhs), std::abs(rhs)));
+    return std::abs(lhs - rhs) <= 1e-12 * magnitude;
+}
+
+void RefreshPackingMetadata(CipherTensor& tensor) {
+    if (tensor.ciphertexts.empty()) {
+        return;
+    }
+    tensor.packing.level = tensor.ciphertexts.front()->GetLevel();
+    tensor.packing.noise_scale_degree =
+        tensor.ciphertexts.front()->GetNoiseScaleDeg();
+    tensor.packing.scaling_factor =
+        tensor.ciphertexts.front()->GetScalingFactor();
+    for (const auto& ciphertext : tensor.ciphertexts) {
+        if (ciphertext->GetLevel() != tensor.packing.level ||
+            ciphertext->GetNoiseScaleDeg() != tensor.packing.noise_scale_degree ||
+            !ScalesMatch(
+                ciphertext->GetScalingFactor(),
+                tensor.packing.scaling_factor)) {
+            throw std::logic_error(
+                "encrypted CipherTensor members do not share scale metadata");
+        }
+    }
+}
+
+}  // namespace
+
+ClientRuntime::ClientRuntime(CryptoProfile profile)
+    : context_(MakeCryptoContext(profile)), profile_(std::move(profile)) {
     ValidateCryptoProfile(profile_);
+    ValidateCryptoContextMatchesProfile(context_, profile_);
     const auto key_pair = context_->KeyGen();
     if (!key_pair.good()) {
         throw std::runtime_error("OpenFHE key generation failed");
@@ -60,9 +91,22 @@ CipherTensor ClientRuntime::Encrypt(
     if (packing.slot_count != profile_.slot_count ||
         packing.active_slots == 0 ||
         packing.active_slots > packing.slot_count ||
+        packing.batch_lanes == 0 ||
         packing.encoded_slots < packing.active_slots ||
-        packing.encoded_slots > packing.slot_count) {
+        packing.encoded_slots > packing.slot_count ||
+        !std::isfinite(packing.scaling_factor) ||
+        packing.scaling_factor <= 0.0) {
         throw std::invalid_argument("packing slot contract does not match the profile");
+    }
+    if (packing.logical_shape.size() != 2 ||
+        packing.logical_shape[0] == 0 ||
+        packing.logical_shape[1] == 0 ||
+        packing.logical_shape[0] * packing.batch_lanes >
+            packing.active_slots ||
+        (packing.layout != PackingLayout::kDiagonal &&
+         packing.logical_shape[1] != plaintexts.size())) {
+        throw std::invalid_argument(
+            "logical shape must describe the encrypted row and feature counts");
     }
 
     CipherTensor result;
@@ -82,6 +126,7 @@ CipherTensor ClientRuntime::Encrypt(
         result.ciphertexts.push_back(
             context_->Encrypt(public_key_, plaintext));
     }
+    RefreshPackingMetadata(result);
     return result;
 }
 
@@ -118,6 +163,7 @@ ServerKeyBundle ClientRuntime::ExportServerKeyBundle() const {
     bundle.context = context_;
     bundle.public_key = public_key_;
     bundle.key_tag = public_key_->GetKeyTag();
+    bundle.profile_parameter_sha256 = profile_.parameter_sha256;
     bundle.rotation_indices = rotation_indices_;
     bundle.has_multiplication_key = multiplication_key_generated_;
     bundle.has_bootstrap_key = bootstrap_key_generated_;

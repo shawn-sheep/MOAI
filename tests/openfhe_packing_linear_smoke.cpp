@@ -191,8 +191,6 @@ int main() {
     try {
         auto profile = moai::openfhe::MakePaperCompatProfile();
         moai::openfhe::PrintSecurityDisclosure(profile, std::cout);
-        auto context = moai::openfhe::MakeCryptoContext(profile);
-
         const std::vector<int32_t> rotation_indices{
             static_cast<int32_t>(kMoaiBatchLanes),
             static_cast<int32_t>(2 * kMoaiBatchLanes),
@@ -208,7 +206,7 @@ int main() {
         moai::openfhe::RunMetrics operation_counts;
 
         {
-            moai::openfhe::ClientRuntime client(context, profile);
+            moai::openfhe::ClientRuntime client(profile);
             client.GenerateEvaluationKeys(rotation_indices, false);
             moai::openfhe::ServerRuntime server(
                 client.ExportServerKeyBundle(),
@@ -355,7 +353,6 @@ int main() {
             }
         }
 
-        context->ClearStaticMapsAndVectors();
         std::cout
             << "{\"test\":\"openfhe_packing_linear_smoke\","
             << "\"profile\":\"paper_compat\","

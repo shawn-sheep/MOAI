@@ -34,7 +34,7 @@
     "bootstrap_inverse_degree": 1
   },
   "openfhe_translation": {
-    "status": "m1_api_validated",
+    "status": "m3_nonlinear_validated",
     "secret_key_distribution": "SPARSE_TERNARY",
     "security_level": "HEStd_NotSet",
     "ring_dimension": 65536,
@@ -51,6 +51,36 @@
       "level_budget": [2, 2],
       "levels_available_after_bootstrap": 2,
       "forbid_workload_claim": true
+    },
+    "m3_smoke_effective_runtime": {
+      "scope": "M3 encrypted nonlinear gate only; not a full-slot workload result",
+      "canonical_encoding": "UTF-8 JSON with lexicographically sorted keys and compact separators",
+      "effective_profile_sha256": "965ded1a76b064c738f55b87b151df60c605d62eaeaad55f6cc753e149f8af59",
+      "parameters": {
+        "bootstrap_bsgs_dim": [0, 0],
+        "bootstrap_correction_factor": 0,
+        "bootstrap_enabled": true,
+        "bootstrap_iterations": 2,
+        "bootstrap_level_budget": [4, 4],
+        "bootstrap_precision": 10,
+        "bootstrap_slots": 16,
+        "bootstrap_slots_to_coefficients_first": false,
+        "effective_profile_schema_version": 1,
+        "first_modulus_bits": 51,
+        "key_switch_technique": "HYBRID",
+        "levels_available_after_bootstrap": 12,
+        "multiplicative_depth": 31,
+        "num_large_digits": 3,
+        "profile_id": "paper_compat",
+        "ring_dimension": 65536,
+        "scaling_modulus_bits": 46,
+        "scaling_technique": "FLEXIBLEAUTO",
+        "secret_key_distribution": "SPARSE_TERNARY",
+        "security_claim": "none",
+        "security_level": "HEStd_NotSet",
+        "slot_count": 32768,
+        "sparse_secret_hamming_weight": 192
+      }
     }
   }
 }

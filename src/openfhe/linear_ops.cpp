@@ -25,6 +25,9 @@ CipherTensor SelectCiphertext(const CipherTensor& tensor, std::size_t index) {
     }
     CipherTensor selected;
     selected.packing = tensor.packing;
+    if (selected.packing.logical_shape.size() == 2) {
+        selected.packing.logical_shape[1] = 1;
+    }
     selected.ciphertexts.push_back(tensor.ciphertexts[index]);
     return selected;
 }

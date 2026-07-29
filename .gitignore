@@ -4,6 +4,8 @@
 /build/
 /build-openfhe/
 /results/openfhe/
+__pycache__/
+*.py[cod]
 thirdparty/SEAL-4.1-bs/build/
 # Prerequisites
 *.d

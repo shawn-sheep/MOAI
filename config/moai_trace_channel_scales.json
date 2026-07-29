@@ -1,0 +1,427 @@
+{
+  "schema_version": 1,
+  "contract_id": "moai-bert-base-five-token-ffn-trace-v1",
+  "profile_id": "paper_compat",
+  "security_claim": "none",
+  "hash_algorithm": "sha256",
+  "scope": {
+    "fixture_only": true,
+    "source_trace_token_count": 5,
+    "scale_provenance": "reverse_engineered_from_existing_five_token_trace",
+    "runtime_scale_inference_allowed": false,
+    "production_generalization": "forbidden",
+    "source_statement": "Channel scales were inferred solely from the checked-in five-token trace."
+  },
+  "dimensions": {
+    "encoder_layers": 12,
+    "trace_token_rows": 5,
+    "hidden_size": 768,
+    "intermediate_size": 3072
+  },
+  "tolerances": {
+    "ffn_input_snapshot": {
+      "max_abs": 0.00001,
+      "rel_l2": 2e-7
+    },
+    "intermediate_linear": {
+      "max_abs": 0.00003,
+      "rel_l2": 4e-7
+    },
+    "exact_gelu": {
+      "max_abs": 0.00001,
+      "rel_l2": 8e-7
+    },
+    "final_linear": {
+      "max_abs": 0.00015,
+      "rel_l2": 5e-7
+    },
+    "residual_add": {
+      "max_abs": 0.00003,
+      "rel_l2": 5e-8
+    },
+    "cross_layer": {
+      "max_abs": 0,
+      "rel_l2": 0,
+      "require_byte_equal": true
+    }
+  },
+  "required_files": {
+    "embedded_inputs": {
+      "path": "Attention/BertSelfAttention/allresults/embedded_inputs.csv",
+      "shape": [
+        5,
+        768
+      ]
+    },
+    "intermediate_inputs": {
+      "path": "Intermediate/allresults/intermediate_inputs.csv",
+      "shape": [
+        5,
+        768
+      ]
+    },
+    "intermediate_weight": {
+      "path": "Intermediate/parms/intermediate_dense_weight.csv",
+      "shape": [
+        3072,
+        768
+      ]
+    },
+    "intermediate_bias": {
+      "path": "Intermediate/parms/intermediate_dense_bias.csv",
+      "shape": [
+        3072
+      ]
+    },
+    "intermediate_after_linear": {
+      "path": "Intermediate/allresults/intermediate_output_after_linear.csv",
+      "shape": [
+        5,
+        3072
+      ]
+    },
+    "real_intermediate_output": {
+      "path": "Intermediate/allresults/real_intermediate_output.csv",
+      "shape": [
+        5,
+        3072
+      ]
+    },
+    "final_output_inputs": {
+      "path": "Output/allresults/final_output_inputs.csv",
+      "shape": [
+        5,
+        3072
+      ]
+    },
+    "final_weight": {
+      "path": "Output/parms/final_output_dense_weight.csv",
+      "shape": [
+        768,
+        3072
+      ]
+    },
+    "final_bias": {
+      "path": "Output/parms/final_output_dense_bias.csv",
+      "shape": [
+        768
+      ]
+    },
+    "final_after_linear": {
+      "path": "Output/allresults/final_output_after_linear.csv",
+      "shape": [
+        5,
+        768
+      ]
+    },
+    "final_residual": {
+      "path": "Output/allresults/final_output_usedby_residual.csv",
+      "shape": [
+        5,
+        768
+      ]
+    },
+    "final_before_layernorm": {
+      "path": "Output/allresults/final_output_residual_connection_before_layernorm.csv",
+      "shape": [
+        5,
+        768
+      ]
+    },
+    "real_final_output": {
+      "path": "Output/allresults/real_final_output.csv",
+      "shape": [
+        5,
+        768
+      ]
+    }
+  },
+  "layers": [
+    {
+      "layer_id": 0,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {},
+      "sha256": {
+        "embedded_inputs": "01c8c25b8c00208c061a813aed522d5c01d8594cf837393ead746c1f80c3d5d0",
+        "intermediate_inputs": "0a4aa4e6c7858591c8274ec8f7f16c61fc7c4f2363b54caedad59134eadc158c",
+        "intermediate_weight": "88ac10e81455c5ee74ea97c3f237081f86752d6983e1cd29bdcfe39d80349187",
+        "intermediate_bias": "a81b0a556018786471ef03e966beeb9b9dd3028d69e0f6b9b3692987d0210638",
+        "intermediate_after_linear": "a029b5c0c4da6ed3808b197acd4fbf7fd4a996e8a055fea694abb807b496a2ca",
+        "real_intermediate_output": "1fad69cf766703454484a970b7db7c5aff481084358e8c2fb17ba71006ba46d9",
+        "final_output_inputs": "22b84880a9f308c5d97a7990700fa305a91b42bf1a5c103f103eafb48ca2962e",
+        "final_weight": "5c285ff3e59467877b96b85a8df72617f069c2b2b28f5bce326d469c04840fb2",
+        "final_bias": "c94d23857e0bd1fb3d7b5684e8b2e591d670750f401be4516df6baf04451d7da",
+        "final_after_linear": "ab2e6e8e0d0d7f83aa581a0fcd0d21c4d76babd27baee04ddfcfb12139792434",
+        "final_residual": "0a4aa4e6c7858591c8274ec8f7f16c61fc7c4f2363b54caedad59134eadc158c",
+        "final_before_layernorm": "73dbafd49fa93e97896c180f8f1fb81b36b1b61eaa1c35a896cdce3fbb4174cb",
+        "real_final_output": "3c6916e12f1b9aab5dd26b5f93eb6e1d453c8b0399c1be957358ce95ab107a73"
+      }
+    },
+    {
+      "layer_id": 1,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {},
+      "sha256": {
+        "embedded_inputs": "3c6916e12f1b9aab5dd26b5f93eb6e1d453c8b0399c1be957358ce95ab107a73",
+        "intermediate_inputs": "c11e640ebe9979ff1a0d075c061372aa78cb40b649b8f75974ed5c260843ad86",
+        "intermediate_weight": "61f5991cb8d4c4f0483eca0441586f8be5311b72df3a88737dbbe970ad9f5b99",
+        "intermediate_bias": "865e1d05aeb49f7b3a80c3ffa8db5edac698fde29ee9e038f3a67281fa99199c",
+        "intermediate_after_linear": "1b125869f617d54340f24f95e8ed04c87ecd45607d76a317d856a1ae23e2ab22",
+        "real_intermediate_output": "1f7652a54e213741ff9cdfd68214f7b959a4b450b9a5482071830dd9c915247c",
+        "final_output_inputs": "6dbb8090811a86f0cddb24818c77a19f1ce94d0c464bbee607b18b129367c554",
+        "final_weight": "6dcb94ce6f9c1cc74213be255939592f5491a6db1d54bcda8e72cf63bc809c08",
+        "final_bias": "cfb4d873753c735b4e1373d8e57328d8e4063f6367a802a5a271f486eedddc12",
+        "final_after_linear": "b67850e79e91308091b35f3afc7a6d06b569a0b9b7a89c77a0e299888dff37c7",
+        "final_residual": "c11e640ebe9979ff1a0d075c061372aa78cb40b649b8f75974ed5c260843ad86",
+        "final_before_layernorm": "476c842a1826056d079efcf371b64c2a414515f63438b48b1dfd63f715e17f6f",
+        "real_final_output": "032f6266134513cd3b7c9b0fa0f5ae7767b09a702e664151104651ca764802d8"
+      }
+    },
+    {
+      "layer_id": 2,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {
+        "1072": 6,
+        "1642": 2
+      },
+      "sha256": {
+        "embedded_inputs": "032f6266134513cd3b7c9b0fa0f5ae7767b09a702e664151104651ca764802d8",
+        "intermediate_inputs": "6071033e9f46b5d2f265b6d4c8397af6be84b8b97ac2cc7611bb6e9fd4b06fe7",
+        "intermediate_weight": "68cd6b3922ede12fee07877109ef32f47d38e7465c97eed50e415b8a68c87ee7",
+        "intermediate_bias": "b6413431b37717dc40e8a787312fed1780c5384087006a8194901c6d644daabc",
+        "intermediate_after_linear": "8d339baeaf3a7a5086285681fb734930a99260a40e2d0d69dd9a926dbd36f982",
+        "real_intermediate_output": "9bcf55dc213286fc391acacbb3715a20038cfb149556c85eb61ebdcc8064d02c",
+        "final_output_inputs": "cd4db4bd50bde45af9b35caa2efeb5be057d7efe60e944d1cea185a81b2e674d",
+        "final_weight": "8c1be1c9abfbc1f1ce48fcd160bcb0afb21f58702268c6b69627713aee1033c6",
+        "final_bias": "e881d10747864cb4eba0d3cd805b2b8184d4bb19562bc9826c1f2dc38795e875",
+        "final_after_linear": "61c5f11c3f20f471d54da58ef6160534f0d320de7b1d88b49479da63d6ae83f1",
+        "final_residual": "6071033e9f46b5d2f265b6d4c8397af6be84b8b97ac2cc7611bb6e9fd4b06fe7",
+        "final_before_layernorm": "4efb388626ca8a88718bb8dad253cb9d853a0da8f42da6a6d7b57ec8732a2665",
+        "real_final_output": "aac312371c0afbb6dfe3141d7f13d5558589e8498c3416b6dd085b4b0de50639"
+      }
+    },
+    {
+      "layer_id": 3,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {
+        "565": 2,
+        "838": 2,
+        "910": 2,
+        "1131": 2,
+        "1378": 2,
+        "1693": 2,
+        "1793": 5,
+        "2217": 2,
+        "2267": 2,
+        "3046": 3
+      },
+      "sha256": {
+        "embedded_inputs": "aac312371c0afbb6dfe3141d7f13d5558589e8498c3416b6dd085b4b0de50639",
+        "intermediate_inputs": "a569217a970b546beba89f6979d7cee14e114bb42a7e217f180bae128b90c83d",
+        "intermediate_weight": "58887013e7518e9b31c3953746de0a85c1b8b248c16dbf288f6c52da8780d9d8",
+        "intermediate_bias": "efde452beee57e1052c56d1e35b1a91d56ad08eb4d7fd3126383bd888d8de94f",
+        "intermediate_after_linear": "576138ac7eac2bebb8f96d3f0afb1dd26f3d80009b83c4f15757551031be2dd8",
+        "real_intermediate_output": "d76c116882702c661df2dbb9d1c744b7d52b002685c779476f81cd2134b65e03",
+        "final_output_inputs": "8f3354a79c3823cc80cfafe524f404576b05b1fb8caa0384b53d77ef64f1a850",
+        "final_weight": "e6db9b700a5632e8c470883a47cad38636a046a620192ff496ac0b183218edea",
+        "final_bias": "c2da9f23049ac1ca7db70065b77b4f1942543d87c074e106dfdba33e01080c1f",
+        "final_after_linear": "da523764749797863a169f07d10b7081dc6ad535941e5c5902a0ab9ecc49a806",
+        "final_residual": "a569217a970b546beba89f6979d7cee14e114bb42a7e217f180bae128b90c83d",
+        "final_before_layernorm": "b94aeb61ec74bd2011677fb1049f14c4ab88f30689f111573385619b0bf13be0",
+        "real_final_output": "37daff8b0099f60e4a00b7e8d971e9073a91c95fb232b323e62a080b6b8ca5db"
+      }
+    },
+    {
+      "layer_id": 4,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {
+        "59": 2,
+        "116": 2,
+        "184": 3,
+        "747": 2,
+        "867": 2,
+        "884": 2,
+        "983": 4,
+        "1449": 2,
+        "1843": 4,
+        "1936": 2,
+        "2856": 5
+      },
+      "sha256": {
+        "embedded_inputs": "37daff8b0099f60e4a00b7e8d971e9073a91c95fb232b323e62a080b6b8ca5db",
+        "intermediate_inputs": "4facba359fe65164fdf405871d8bb5cd1d8702eba8c2e4b39533d23c05a92968",
+        "intermediate_weight": "726f61c596db7c752f392147d4ca6dd7f054c8594f7d6972df413825376200f1",
+        "intermediate_bias": "b0cb674f9e95c35387d9fc61284e2f4d16b3b993b38b2e9c12abe07f6a228e97",
+        "intermediate_after_linear": "e924ba175aeb9fdf8bd80dae9521464e8940191fd5ba76fea4d0a681193468f6",
+        "real_intermediate_output": "87523ef2010e84c227479867bdab65ab8a27095ad17037e3a7659520a45d387c",
+        "final_output_inputs": "8921702efc59a7b99266eaa4b5b8ab8375f62665956dff6667eb76b159464bf3",
+        "final_weight": "d9e32dffa4715c619174f7d5a5d1dfee4afd295a3fd94a00321f6ad6ba718308",
+        "final_bias": "3c26a258a218e218c96961eb6384230f87401c532dc252fb67053b5c42c5b67c",
+        "final_after_linear": "50b22109b1d4a27e0a82b247b82479188f5a5c1a75eced51fb8dce0bb65799b7",
+        "final_residual": "4facba359fe65164fdf405871d8bb5cd1d8702eba8c2e4b39533d23c05a92968",
+        "final_before_layernorm": "5beb08c374f55fab694023368739854bb058f461ebdc96eb2992bfd0700be0f1",
+        "real_final_output": "bc45ac45cc236b2da2f2d56a92a0163f458c89ba2d1e270236105ab887c29260"
+      }
+    },
+    {
+      "layer_id": 5,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {
+        "1360": 2,
+        "1517": 4,
+        "1754": 2,
+        "2577": 2,
+        "2739": 4,
+        "2837": 2
+      },
+      "sha256": {
+        "embedded_inputs": "bc45ac45cc236b2da2f2d56a92a0163f458c89ba2d1e270236105ab887c29260",
+        "intermediate_inputs": "a58f7d3b7504c9f48b9448422cf9e92a428c15628cc94f915b91f58661250aaf",
+        "intermediate_weight": "e3622ee436cc4f878310ef7b4b7af4a76b1bbddeadcac6b5e0896b6a2a788b02",
+        "intermediate_bias": "fa74848862c6d9ce61ba9f8f1164386af84f630b5656f4d0fb181277570525d7",
+        "intermediate_after_linear": "a8f818305627ccda7787db57618ff250164c62a02a833d1587800cc12d5fcfa6",
+        "real_intermediate_output": "beec8d9db59888b5a0120c45df37245bd10933d2ae6f24707f876a9c9a8590a4",
+        "final_output_inputs": "c981cc30763bfe3648d6356cf8c495ee13329e24c977301403743fec28ca8445",
+        "final_weight": "92607a4bd31532094e887ec4c71b4601d27a581b9f824b4c1eb6d21f08330fd4",
+        "final_bias": "953590bfbdde79ef33cda3e4c7f69ec28f993892453a3444c8edade087a56a26",
+        "final_after_linear": "9fe5ce42600ca687f8466f4dd2559081a61b68863a0807ff6b97e5156907eedd",
+        "final_residual": "a58f7d3b7504c9f48b9448422cf9e92a428c15628cc94f915b91f58661250aaf",
+        "final_before_layernorm": "8865449ef2c73ef233f0044e1429f6155702994e9ed555b710b5eab6518bd9a5",
+        "real_final_output": "481fa83287a47764d6196ed6fb4d5276629270c408215e5abdf9e47b8547ea4f"
+      }
+    },
+    {
+      "layer_id": 6,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {
+        "313": 2,
+        "2089": 2
+      },
+      "sha256": {
+        "embedded_inputs": "481fa83287a47764d6196ed6fb4d5276629270c408215e5abdf9e47b8547ea4f",
+        "intermediate_inputs": "b29bafcd1da7384284b7b90de2ead2d345fc760ec1fa06a9f7120a04c64f58b2",
+        "intermediate_weight": "0cc00dc73dadd10775593c628e5a308ac8ca54389e334754f3795237dbf2c6fe",
+        "intermediate_bias": "7e5732cd9647221b8cbd3e6c5721d7c9c2d76cf886f8b58ab56503528e3af0a0",
+        "intermediate_after_linear": "5d03f42da2f563eaf6ff559025db075d3f161e4076427f52fc356dfe626587d3",
+        "real_intermediate_output": "884ad729f1575eefed6a19a0fade36c16010a1f9897b5880d13575409e67c50b",
+        "final_output_inputs": "d74a279bd9ca4c369d1c720c2350db993ce9e99a9e84a72e7e1b1e8979baece4",
+        "final_weight": "7b1f1e86833fcdd1ade5b3668c9afb03e717a79310c3c80fbd8ec7d93d903296",
+        "final_bias": "ec05beda048658a403532c0d31308be163e5f5e8ec4304fdbfbaca069289183b",
+        "final_after_linear": "9b63656e8d4d8be97ff1859f409b938582a3e60d12571390f483117f5f833b7a",
+        "final_residual": "b29bafcd1da7384284b7b90de2ead2d345fc760ec1fa06a9f7120a04c64f58b2",
+        "final_before_layernorm": "8e460bc322bfe385fcffbb2f7627bc05f7c4b3bf1b1ba5d7034e360baaccc825",
+        "real_final_output": "d1a269f1ecdffb8ee8610810ee7858a537f6ae60e0e0854fccc77499db2636da"
+      }
+    },
+    {
+      "layer_id": 7,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {
+        "294": 2,
+        "520": 2
+      },
+      "sha256": {
+        "embedded_inputs": "d1a269f1ecdffb8ee8610810ee7858a537f6ae60e0e0854fccc77499db2636da",
+        "intermediate_inputs": "451993e7c5132446485a71b83a67b0c08736dc42175aea496762283a3dc60dd8",
+        "intermediate_weight": "2677a19bf5c5de74479861251cb1011762efc44d626658ff7ab4f3b24ba02f54",
+        "intermediate_bias": "64c336fba7f4b4a6481adaeff4b2c282c576fd97206e20689d9c77b94e8f6a0f",
+        "intermediate_after_linear": "957025290cb45f43ed7956e3fcc056e3889c2aa3c27d0390e89e9dfb2ecccf4b",
+        "real_intermediate_output": "797298a51f07f2efb91130e426bcf28788593ac8a1209a2e0a7dc488c4b44d85",
+        "final_output_inputs": "4921ae42ca56853bfae88dcd5aa4bfd2c4523d1c41e6e132588602e3feab0872",
+        "final_weight": "87c94bf277a6c81f1806624922f6f5c4769d9f7fc89ac9cf588d9819c9a84f01",
+        "final_bias": "d1d2fc706d1be55d3159d666e074c567459a7268012fa196d4dc74f1b6534645",
+        "final_after_linear": "95485e52787d8ec0994761928847c62b336c54d8d6ef9488ec5aef85a89dc240",
+        "final_residual": "451993e7c5132446485a71b83a67b0c08736dc42175aea496762283a3dc60dd8",
+        "final_before_layernorm": "8bfa79f98c35542c549fc2cad98a25bafa8d7275812cdd98e3262b441853f95c",
+        "real_final_output": "3141a4f72664f0f4d5e134de78ce4da226b130dedd8b4fe3e052a78640201f94"
+      }
+    },
+    {
+      "layer_id": 8,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {},
+      "sha256": {
+        "embedded_inputs": "3141a4f72664f0f4d5e134de78ce4da226b130dedd8b4fe3e052a78640201f94",
+        "intermediate_inputs": "2dceffae12ed33ee8b89112b57debee1c84f6cb7404b4b792c8479d6294faa63",
+        "intermediate_weight": "bd089b6ee30c50830c2388c4ceb1fbafcdee4aef9fa410b3201136ff50a17310",
+        "intermediate_bias": "a5167e4a6b6b8c7e09903bd8be2c08f420a7d84fac8aea115a3d40a0c321d4fb",
+        "intermediate_after_linear": "e34e36387d2bf974d451974dc5d69c89dd8a767cf838ec9fb88f6dbf56555384",
+        "real_intermediate_output": "a3810c4e70cf1a8930fcf649e5c536bbdf028566265c3fde612b0283a8dd0835",
+        "final_output_inputs": "f48363c744ad5c2ba417c8e2a9a0e75229a4876d2fe6f925b228701cdf881d8b",
+        "final_weight": "db495a62531b8d690cf3c0512c8f852f83f2ea54477300ea69ad22d78f299609",
+        "final_bias": "ee1cd0454f4dddbd67dd8391c46191da023cf6166c92f8d41dc080c65677a88c",
+        "final_after_linear": "64e47961c4824afdd7ac5c10db919b865eb7007cce6945472813848735cd169e",
+        "final_residual": "2dceffae12ed33ee8b89112b57debee1c84f6cb7404b4b792c8479d6294faa63",
+        "final_before_layernorm": "9d5996948c23ff5f6a42f852b164425ee67c7dceadb98ca35fae522677905f2e",
+        "real_final_output": "ee5f446a5b16d1dcff1c02e43c0628090b84ca0e14a8b13a459ebb651ba3be68"
+      }
+    },
+    {
+      "layer_id": 9,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {
+        "2184": 3,
+        "2189": 4,
+        "2958": 3
+      },
+      "sha256": {
+        "embedded_inputs": "ee5f446a5b16d1dcff1c02e43c0628090b84ca0e14a8b13a459ebb651ba3be68",
+        "intermediate_inputs": "44a729c179e6c68e8b03859c627be6fee99271e7f87df4cd815da61d74f9016c",
+        "intermediate_weight": "5ade8034ae18021a32339f5524d4a7bd26bbb1d33cd21ac3fa9595572ec3e062",
+        "intermediate_bias": "1dbbd4f32a2ce83f5ff660b4a3e359e024d18d4317b188652b10f5967733a049",
+        "intermediate_after_linear": "f0ca6b668d1c1983752bc49b2bc07014b629ba70aa3907fd17f7a8134447b4bc",
+        "real_intermediate_output": "0c44a174a03124e02437468da1d7da08c9451b24c0d15f431929c8bffa4fc401",
+        "final_output_inputs": "dbf9df5c13a38e6b1a6bc636e98974e7dab62324f4c503dd2d2b6ae34451c8f4",
+        "final_weight": "68e5b2fb5fc56a4fbd1f6d5eff8ed1b076e8ed74a824defa0611b9ae12269f5c",
+        "final_bias": "90ba9b3fcfc8c720cc5a31bccfb5c5774984964e59604ab2ba9d732f33955055",
+        "final_after_linear": "ece6ff0af0812e41b67bf2131e7f727a4f41f7de49a2fd16209ddeb14bfe607d",
+        "final_residual": "44a729c179e6c68e8b03859c627be6fee99271e7f87df4cd815da61d74f9016c",
+        "final_before_layernorm": "5e2314a919cc4505b19bbda965394ca6c3afeab47bf31e841d4a928e9ae03a4e",
+        "real_final_output": "a768b871135c23a2e4b5ce7d536e2c3fc2ffe1c4ae231a8908ce9ddffde94681"
+      }
+    },
+    {
+      "layer_id": 10,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {
+        "1046": 15,
+        "1942": 3
+      },
+      "sha256": {
+        "embedded_inputs": "a768b871135c23a2e4b5ce7d536e2c3fc2ffe1c4ae231a8908ce9ddffde94681",
+        "intermediate_inputs": "3686e3a9b3a4916684e8d046f478001ed87d1e5da00de515d5c79488c0907f36",
+        "intermediate_weight": "aa2487e36d59816dc6bfc46c29a2c29fea67177d0f513ad747794f105eb5e720",
+        "intermediate_bias": "4b5dc5276a57ed3cdc8242f1945873bed3cfaaa8276508191646e9653b98a976",
+        "intermediate_after_linear": "de73792f855bec4b1cd61ffc84edee7ddb4b06c701ec1abd53cb3fe42f9abbe8",
+        "real_intermediate_output": "7eb279dbbe5bd239972a38d1b62f50b69f0537e77c602d7dc34fce52c5781187",
+        "final_output_inputs": "68f34e9eb1c8a57aab8446d0bf68c5239fd4bdb5b74e388739d2443efcd162ff",
+        "final_weight": "02e5908698bcf0fab48c5a9ede1878481b51ed42fadb10ebb9a806091e4021ee",
+        "final_bias": "1b7e4d8424317740241cac129ced14bb380c2ed798bb24f83391de58cb3d1997",
+        "final_after_linear": "141f4a1a8a89e010a6f06614a0a2a66b5a8478a3c6d9579a3b14494f197db5f2",
+        "final_residual": "3686e3a9b3a4916684e8d046f478001ed87d1e5da00de515d5c79488c0907f36",
+        "final_before_layernorm": "c77937a3e54d15fe479876d9ae92c02bd75f5ea59be5d2e6270a9aaf1122db82",
+        "real_final_output": "c192cb5916f84b5fad156c0f4badf5f023ec9f811ea7463e4818dddd29a51216"
+      }
+    },
+    {
+      "layer_id": 11,
+      "channel_scale_default": 1,
+      "channel_scale_overrides": {},
+      "sha256": {
+        "embedded_inputs": "c192cb5916f84b5fad156c0f4badf5f023ec9f811ea7463e4818dddd29a51216",
+        "intermediate_inputs": "7e6506d1b67f0fcd36a5f492402f198c1999204b5c45a3d8df281ba93409cd32",
+        "intermediate_weight": "28ebcf614232be732d9aadc7c0bf3483003f1c9eecf92183b605dc8bfba6a479",
+        "intermediate_bias": "8223dc048548d2ad8dd1e16d2752ce774087c862a6d2a00f599b3ddebc6c1e0d",
+        "intermediate_after_linear": "afadfb2e8424b7320662d6591e5baf9b2d99a27db659eaaa86cd74480a18c683",
+        "real_intermediate_output": "b550d7f6c4a35821e68ef149bb29f0be1f21da3fb835a87dcc428549f20a732f",
+        "final_output_inputs": "2d464eaee6bd89def7d3b7a8d7f24f6f5da42c5139a12cd6b019cc8fc2dae014",
+        "final_weight": "73ddd7d992ee9e15463b1e5e7118a913ac6ec9f4bf455baedbb1230e7a2b73b4",
+        "final_bias": "a6da88aef6a689743bcafb4fc7657e50a5fad498bece53d4e77292cc67b080d6",
+        "final_after_linear": "f5537db9bdc2e7039ddad77611225d0f72e1753c304c7cd0f8376b6696cafff2",
+        "final_residual": "7e6506d1b67f0fcd36a5f492402f198c1999204b5c45a3d8df281ba93409cd32",
+        "final_before_layernorm": "2374a289f4c7d36084c647f3d31ffc1a8b7467cab49e171b02e0a4d995e205b8",
+        "real_final_output": "ec94efa46a64c2bab2cf7feb93fd0d28f14aa1e8c38fa6f064367aaf54971984"
+      }
+    }
+  ]
+}

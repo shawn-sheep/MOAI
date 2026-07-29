@@ -3,8 +3,9 @@
 ## OpenFHE CPU migration
 
 The default build is the staged OpenFHE v1.5.1 CPU migration. It currently provides the
-M2 client/server runtime boundary, full 32768-slot interleaved packing for 256 distinct
-lanes, and OpenFHE column/diagonal linear kernels. The only accepted parameter profile
+M3 client/server runtime boundary, full 32768-slot interleaved packing for 256 distinct
+lanes, OpenFHE column/diagonal linear kernels, and contract-gated nonlinear operators.
+The only accepted parameter profile
 is `paper_compat`, which always reports `security_claim=none`. These research
 reproduction parameters do not support a 128-bit security claim.
 
@@ -26,6 +27,37 @@ and Ct-Ct diagonal-column BSGS kernels at rel-L2 `1e-4` and cosine `0.99999`:
 ```bash
 ctest --test-dir build-openfhe --output-on-failure \
   -R openfhe_packing_linear_smoke
+```
+
+The M3 nonlinear gate evaluates GELU, fixed-public-shift masked softmax, LayerNorm, and
+a reduced two-layer FFN against the same frozen Chebyshev-series oracle. Softmax and
+scaled LayerNorm variance use OpenFHE's native CKKS bootstrap; a depleted FFN fixture
+also verifies the conditional pre-GELU bootstrap. Frozen usable-level budgets are 12
+from GELU pre-activation through the final affine, 7/12 before/after the softmax
+bootstrap, and 4/11 before/after the LayerNorm bootstrap. The smoke uses an
+explicit test-only 16-slot encoding with four active and twelve masked inactive slots;
+masked outputs plus every GELU checkpoint retain the 1e-6 inactive-slot hard gate.
+Softmax resolves a single offline-calibrated public shift from a frozen 12-by-12
+layer/head registry; callers cannot inject approximation contracts or activation-derived
+ranges. The denominator intentionally uses identity values in inactive slots. The gate
+also freezes the reduced graph's rotations, ciphertext multiplications, rescale,
+bootstrap, Chebyshev-evaluation, and polynomial-depth counts. This is not a full
+32768-slot nonlinear workload result:
+
+```bash
+ctest --test-dir build-openfhe --output-on-failure \
+  -R openfhe_nonlinear_smoke
+```
+
+The frozen plaintext approximation and five-token trace contracts are also registered
+with CTest. Their Python interpreter and data root are configurable:
+
+```bash
+cmake -S . -B build-openfhe \
+  -DMOAI_PYTHON_EXECUTABLE=/path/to/python3.10 \
+  -DMOAI_TRACE_DATA_ROOT=/path/to/MOAI/data
+ctest --test-dir build-openfhe --output-on-failure \
+  -R 'openfhe_nonlinear_contract|openfhe_artifact_schema_contract|moai_trace_contract'
 ```
 
 The native CKKS bootstrap API/level-refresh smoke is deliberately separate and uses an
