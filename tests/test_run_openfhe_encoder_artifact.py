@@ -729,7 +729,22 @@ else:
                 runner.DEFAULT_OPENFHE_PREFIX,
             )
         ctest_command = next(command for command in commands if command[0] == "ctest")
-        self.assertIn("--no-tests=error", ctest_command)
+        self.assertEqual(
+            ctest_command,
+            [
+                "ctest",
+                "--test-dir",
+                str(runner.DEFAULT_EXECUTABLE.parent),
+                "--output-on-failure",
+                "--no-tests=error",
+                "-R",
+                validator.M4_CTEST_PATTERN,
+            ],
+        )
+
+    def test_runner_and_validator_share_frozen_m4_ctest_pattern(self) -> None:
+        self.assertEqual(runner.M4_CTEST_PATTERN, validator.M4_CTEST_PATTERN)
+        self.assertIn("profile_validator_contract", runner.M4_CTEST_PATTERN)
 
     def test_fixed_executable_path_rejects_another_same_named_binary(self) -> None:
         self._write_fake()

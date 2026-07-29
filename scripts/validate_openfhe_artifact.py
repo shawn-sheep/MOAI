@@ -255,6 +255,7 @@ ENCODER_ESTIMATED_POLYNOMIAL_MULTIPLICATIONS_PER_LAYER = 1150
 M4_WORKLOAD_EXECUTABLE_PATH = "build-openfhe/openfhe_encoder_layer_smoke"
 M4_CTEST_PATTERN = (
     "^(moai_trace_contract|openfhe_(server_trust_boundary|profile_contract|"
+    "profile_validator_contract|"
     "artifact_schema_contract|artifact_validator_contract|"
     "encoder_artifact_runner_contract|evaluation_key_bundle_smoke|"
     "feature_packed_smoke|"
@@ -937,7 +938,10 @@ def _verify_m4_go_command_transcript(
         "-R",
         M4_CTEST_PATTERN,
     ]:
-        raise ValidationError("commands[5] differs from the frozen narrow CTest")
+        raise ValidationError(
+            "commands[5] differs from the frozen narrow CTest: "
+            f"actual={ctest!r} expected_pattern={M4_CTEST_PATTERN!r}"
+        )
     linkage = _command_tokens(commands[6], "commands[6] OpenFHE linkage", timed=True)
     if linkage != ["ldd", str(executable)]:
         raise ValidationError("commands[6] differs from the frozen ldd check")
