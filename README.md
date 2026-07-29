@@ -1,36 +1,57 @@
 # MOAI
 
-# 1. Install on Ubuntu/Debian
-## Install dependent libraries
+## OpenFHE CPU migration
+
+The default build is the staged OpenFHE v1.5.1 CPU migration. It currently provides the
+M1 client/server runtime boundary and CKKS smoke tests. The only accepted parameter
+profile is `paper_compat`, which always reports `security_claim=none`. These research
+reproduction parameters do not support a 128-bit security claim.
+
+Configure, build, and run the fast gates:
+
+```bash
+cmake -S . -B build-openfhe \
+  -DOpenFHE_DIR=/home/shawnsheep/opt/openfhe_v1_5_1/lib/OpenFHE \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=ON
+cmake --build build-openfhe -j
+ctest --test-dir build-openfhe --output-on-failure -LE slow
+```
+
+The native CKKS bootstrap API/level-refresh smoke is deliberately separate and uses an
+explicit test-only 8-slot encoding. It is not a 32768-slot workload result:
+
+```bash
+ctest --test-dir build-openfhe --output-on-failure -R openfhe_bootstrap_smoke
+```
+
+## Optional legacy SEAL reference
+
+Install dependencies and the vendored SEAL fork:
+
 ```
 sudo apt update
 sudo apt install cmake g++ git libntl-dev libssl-dev libgmp-dev pkg-config
-```
-
-## Install the third party SEAL globally
-```
 cd thirdparty/SEAL-4.1-bs
-// if build exist, run
-// rm -rf build
 cmake -S . -B build
 cmake --build build
 sudo cmake --install build
 ```
 
-# 2. Go to main folder and Run
-```
-cmake -S . -B build
-cd build
-make
-./moai_seal_reference
+Then enable the reference target explicitly:
+
+```bash
+cmake -S . -B build-seal -DMOAI_ENABLE_SEAL_REFERENCE=ON
+cmake --build build-seal --target moai_seal_reference -j
 ```
 
-# 3. Test result
-```
-All time cost results outputted is the total time of 256 inputs (each input has up to 128 tokens).
-Please divide by 256 to get the amortized time. 
-```
-# Citation
+The legacy default entrypoint includes the full source graph and is not registered as an
+automated correctness test. Its historical output reports total packed-batch time for a
+capacity of 256 inputs; that capacity must not be described as 256 distinct measured
+samples without a nonzero multi-lane fixture.
+
+## Citation
+
 ```
 @misc{cryptoeprint:2025/991,
       author = {Linru Zhang and Xiangning Wang and Jun Jie Sim and Zhicong Huang and Jiahao Zhong and Huaxiong Wang and Pu Duan and Kwok Yan Lam},

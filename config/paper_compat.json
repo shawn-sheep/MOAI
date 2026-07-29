@@ -34,9 +34,23 @@
     "bootstrap_inverse_degree": 1
   },
   "openfhe_translation": {
-    "status": "pending_m1",
+    "status": "m1_api_validated",
+    "secret_key_distribution": "SPARSE_TERNARY",
+    "security_level": "HEStd_NotSet",
+    "ring_dimension": 65536,
+    "slot_capacity": 32768,
+    "scaling_modulus_bits": 46,
+    "first_modulus_bits": 51,
     "require_native_eval_bootstrap": true,
     "allow_security_level_not_set": true,
-    "forbid_security_claim": true
+    "forbid_security_claim": true,
+    "full_slot_bootstrap_status": "not_validated_m1",
+    "bootstrap_smoke_override": {
+      "scope": "test-only API and level-refresh validation",
+      "encoded_slots": 8,
+      "level_budget": [2, 2],
+      "levels_available_after_bootstrap": 2,
+      "forbid_workload_claim": true
+    }
   }
 }
