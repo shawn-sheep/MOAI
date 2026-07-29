@@ -3,8 +3,9 @@
 ## OpenFHE CPU migration
 
 The default build is the staged OpenFHE v1.5.1 CPU migration. It currently provides the
-M1 client/server runtime boundary and CKKS smoke tests. The only accepted parameter
-profile is `paper_compat`, which always reports `security_claim=none`. These research
+M2 client/server runtime boundary, full 32768-slot interleaved packing for 256 distinct
+lanes, and OpenFHE column/diagonal linear kernels. The only accepted parameter profile
+is `paper_compat`, which always reports `security_claim=none`. These research
 reproduction parameters do not support a 128-bit security claim.
 
 Configure, build, and run the fast gates:
@@ -16,6 +17,15 @@ cmake -S . -B build-openfhe \
   -DBUILD_TESTING=ON
 cmake --build build-openfhe -j
 ctest --test-dir build-openfhe --output-on-failure -LE slow
+```
+
+The M2 gate uses all 32768 slots and 256 distinct interleaved lanes. It checks inactive
+and cross-lane error at `1e-6`, then checks Ct-Pt column, Ct-Ct column-to-diagonal,
+and Ct-Ct diagonal-column BSGS kernels at rel-L2 `1e-4` and cosine `0.99999`:
+
+```bash
+ctest --test-dir build-openfhe --output-on-failure \
+  -R openfhe_packing_linear_smoke
 ```
 
 The native CKKS bootstrap API/level-refresh smoke is deliberately separate and uses an

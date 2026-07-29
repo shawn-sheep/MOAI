@@ -135,6 +135,47 @@ CipherTensor ServerRuntime::Multiply(
     return result;
 }
 
+CipherTensor ServerRuntime::Add(
+    const CipherTensor& lhs,
+    const CipherTensor& rhs) {
+    if (lhs.empty() || rhs.empty() || lhs.size() != rhs.size()) {
+        throw std::invalid_argument(
+            "ciphertext addition requires non-empty tensors of equal size");
+    }
+    if (lhs.packing.slot_count != rhs.packing.slot_count ||
+        lhs.packing.batch_lanes != rhs.packing.batch_lanes) {
+        throw std::invalid_argument("ciphertext packing contracts do not match");
+    }
+    CipherTensor result;
+    result.packing = lhs.packing;
+    result.ciphertexts.reserve(lhs.size());
+    for (std::size_t i = 0; i < lhs.size(); ++i) {
+        result.ciphertexts.push_back(
+            context_->EvalAdd(lhs.ciphertexts[i], rhs.ciphertexts[i]));
+    }
+    RefreshPackingMetadata(result);
+    metrics_.max_observed_level =
+        std::max(metrics_.max_observed_level, result.packing.level);
+    return result;
+}
+
+CipherTensor ServerRuntime::Sum(const CipherTensor& input) {
+    if (input.empty()) {
+        throw std::invalid_argument("cannot sum an empty CipherTensor");
+    }
+    CipherTensor result;
+    result.packing = input.packing;
+    result.ciphertexts.push_back(input.ciphertexts.front());
+    for (std::size_t i = 1; i < input.size(); ++i) {
+        result.ciphertexts.front() = context_->EvalAdd(
+            result.ciphertexts.front(), input.ciphertexts[i]);
+    }
+    RefreshPackingMetadata(result);
+    metrics_.max_observed_level =
+        std::max(metrics_.max_observed_level, result.packing.level);
+    return result;
+}
+
 CipherTensor ServerRuntime::Rescale(const CipherTensor& input) {
     if (input.empty()) {
         throw std::invalid_argument("cannot rescale an empty CipherTensor");

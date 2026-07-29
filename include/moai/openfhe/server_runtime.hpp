@@ -24,6 +24,10 @@ public:
     [[nodiscard]] CipherTensor Multiply(
         const CipherTensor& lhs,
         const CipherTensor& rhs);
+    [[nodiscard]] CipherTensor Add(
+        const CipherTensor& lhs,
+        const CipherTensor& rhs);
+    [[nodiscard]] CipherTensor Sum(const CipherTensor& input);
     [[nodiscard]] CipherTensor Rescale(const CipherTensor& input);
 
     void PrepareBootstrap();

@@ -33,12 +33,18 @@ target_link_libraries(moai_openfhe_vendor INTERFACE
   OpenMP::OpenMP_CXX
 )
 
-add_library(moai_openfhe_common STATIC src/openfhe/context_factory.cpp)
+add_library(moai_openfhe_common STATIC
+  src/openfhe/context_factory.cpp
+  src/openfhe/packing.cpp
+)
 target_include_directories(moai_openfhe_common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(moai_openfhe_common PUBLIC moai_openfhe_vendor)
 add_library(moai::openfhe_common ALIAS moai_openfhe_common)
 
-add_library(moai_openfhe_server STATIC src/openfhe/server_runtime.cpp)
+add_library(moai_openfhe_server STATIC
+  src/openfhe/server_runtime.cpp
+  src/openfhe/linear_ops.cpp
+)
 target_include_directories(moai_openfhe_server PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(moai_openfhe_server PUBLIC moai_openfhe_common)
 add_library(moai::openfhe_server ALIAS moai_openfhe_server)
@@ -97,6 +103,31 @@ if(BUILD_TESTING)
   target_link_options(openfhe_fast_smoke PRIVATE "-Wl,--disable-new-dtags")
   add_test(NAME openfhe_fast_smoke COMMAND openfhe_fast_smoke)
   set_tests_properties(openfhe_fast_smoke PROPERTIES LABELS "openfhe;fast")
+
+  add_executable(
+    openfhe_packing_linear_smoke
+    tests/openfhe_packing_linear_smoke.cpp
+  )
+  target_link_libraries(openfhe_packing_linear_smoke PRIVATE
+    moai::openfhe_client
+    moai::openfhe_server
+  )
+  set_target_properties(
+    openfhe_packing_linear_smoke
+    PROPERTIES BUILD_RPATH "${OpenFHE_LIBDIR}"
+  )
+  target_link_options(
+    openfhe_packing_linear_smoke
+    PRIVATE "-Wl,--disable-new-dtags"
+  )
+  add_test(
+    NAME openfhe_packing_linear_smoke
+    COMMAND openfhe_packing_linear_smoke
+  )
+  set_tests_properties(openfhe_packing_linear_smoke PROPERTIES
+    LABELS "openfhe;fast;m2;packing;linear"
+    TIMEOUT 300
+  )
 
   add_executable(openfhe_bootstrap_smoke tests/openfhe_bootstrap_smoke.cpp)
   target_link_libraries(openfhe_bootstrap_smoke PRIVATE

@@ -1,6 +1,8 @@
 set(server_files
   "${MOAI_SOURCE_DIR}/include/moai/openfhe/server_runtime.hpp"
-  "${MOAI_SOURCE_DIR}/src/openfhe/server_runtime.cpp")
+  "${MOAI_SOURCE_DIR}/src/openfhe/server_runtime.cpp"
+  "${MOAI_SOURCE_DIR}/include/moai/openfhe/linear_ops.hpp"
+  "${MOAI_SOURCE_DIR}/src/openfhe/linear_ops.cpp")
 
 foreach(server_file IN LISTS server_files)
   if(NOT EXISTS "${server_file}")
@@ -24,4 +26,4 @@ foreach(server_file IN LISTS server_files)
 endforeach()
 
 message(STATUS
-  "OpenFHE ServerRuntime source contains no private-key or decryption interface")
+  "OpenFHE server sources contain no private-key or decryption interface")
