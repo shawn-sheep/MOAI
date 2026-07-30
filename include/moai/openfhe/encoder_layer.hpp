@@ -56,6 +56,7 @@ struct EncoderLayerCheckpoints {
     CipherTensor attention_after_bootstrap;
     CipherTensor self_projection;
     CipherTensor attention_residual;
+    CipherTensor attention_layernorm_normalized_variance;
     CipherTensor attention_layernorm;
 
     std::array<CipherTensor, kPaperCompatIntermediateBlocks>
@@ -72,6 +73,7 @@ struct EncoderLayerCheckpoints {
     CipherTensor output_projection;
     CipherTensor output_residual_before_bootstrap;
     CipherTensor output_residual_after_bootstrap;
+    CipherTensor output_layernorm_normalized_variance;
     CipherTensor output_layernorm;
 };
 
@@ -83,6 +85,14 @@ struct EncoderLayerResult {
 // Exact rotation-key union for the 1024-slot BERT-base layer. The result is
 // sorted and duplicate-free and includes every SumSlots power-of-two key.
 [[nodiscard]] std::vector<int32_t> FeaturePackedEncoderRotationIndices();
+
+// Read-only server-side gate for the native-bootstrap handoff consumed by
+// layers 1 through 11. It validates packing, ciphertext metadata, and the exact
+// paper_compat (level, scale degree, remaining levels, scale, count) tuple.
+// It performs no encoding, decryption, or homomorphic operation.
+void RequirePaperCompatInterLayerHandoff(
+    const CipherTensor& input,
+    const ServerRuntime& server);
 
 class FeaturePackedEncoderLayer {
 public:
@@ -104,6 +114,65 @@ private:
     FeaturePackedOps affine_;
     FeaturePackedAttention attention_;
     NonlinearOps nonlinear_;
+};
+
+// Ciphertext-only view delivered after one layer and its optional next-layer
+// handoff finish.  The server target exposes no private-key or decryption
+// interface.  Client-side validators may decrypt checkpoint handles, but C++
+// shared-handle constness is not claimed as cryptographic immutability.
+struct EncoderLayerCiphertextTrace {
+    std::size_t layer_index{0};
+    bool inter_layer_refresh{false};
+    const CipherTensor& input;
+    const EncoderLayerResult& result;
+    const RunMetrics& metrics_before_layer;
+    const RunMetrics& metrics_after_layer;
+    const RunMetrics& metrics_after_refresh;
+};
+
+class EncoderCiphertextObserver {
+public:
+    virtual ~EncoderCiphertextObserver() = default;
+    virtual void Observe(const EncoderLayerCiphertextTrace& trace) = 0;
+};
+
+struct EncoderStackResult {
+    CipherTensor output;
+};
+
+class FeaturePackedEncoder {
+public:
+    explicit FeaturePackedEncoder(ServerRuntime& server)
+        : server_(server), layer_(server) {}
+
+    // Executes exactly the 12 ordered paper_compat layers.  Layer zero consumes
+    // the caller's ciphertext.  Each later layer consumes only a native-
+    // bootstrapped and public-prefix-masked copy of the preceding ciphertext
+    // output; plaintext activation resets are not an API option.
+    [[nodiscard]] EncoderStackResult Evaluate(
+        CipherTensor input,
+        const std::vector<EncoderLayerWeights>& weights,
+        EncoderCiphertextObserver* observer = nullptr);
+
+    // Runs a strict 1-through-11-layer prefix only for an explicitly labelled
+    // seam diagnostic. All 12 weight sets are still validated before any
+    // homomorphic work. The formal 12-layer graph is available only via
+    // Evaluate().
+    [[nodiscard]] EncoderStackResult EvaluatePrefixForDiagnostics(
+        CipherTensor input,
+        const std::vector<EncoderLayerWeights>& weights,
+        std::size_t layer_count,
+        EncoderCiphertextObserver* observer = nullptr);
+
+private:
+    [[nodiscard]] EncoderStackResult EvaluateImpl(
+        CipherTensor input,
+        const std::vector<EncoderLayerWeights>& weights,
+        std::size_t layer_count,
+        EncoderCiphertextObserver* observer);
+
+    ServerRuntime& server_;
+    FeaturePackedEncoderLayer layer_;
 };
 
 }  // namespace moai::openfhe

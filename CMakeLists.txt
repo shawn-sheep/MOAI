@@ -191,7 +191,7 @@ if(BUILD_TESTING)
             "${CMAKE_SOURCE_DIR}/config/paper_compat_feature_packed.json"
   )
   set_tests_properties(openfhe_profile_contract PROPERTIES
-    LABELS "m3;m4;plaintext;profile"
+    LABELS "m3;m4;m5;plaintext;profile"
     TIMEOUT 60
   )
 
@@ -201,7 +201,7 @@ if(BUILD_TESTING)
             "${CMAKE_SOURCE_DIR}/tests/test_validate_openfhe_profile.py"
   )
   set_tests_properties(openfhe_profile_validator_contract PROPERTIES
-    LABELS "m4;plaintext;profile"
+    LABELS "m4;m5;plaintext;profile"
     TIMEOUT 60
   )
 
@@ -237,6 +237,37 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME openfhe_m5_artifact_schema_contract
+    COMMAND "${MOAI_PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/scripts/validate_openfhe_m5_artifact.py"
+            --schema "${CMAKE_SOURCE_DIR}/docs/openfhe-m5-artifact-schema.json"
+  )
+  set_tests_properties(openfhe_m5_artifact_schema_contract PROPERTIES
+    LABELS "m5;plaintext;artifact"
+    TIMEOUT 60
+  )
+
+  add_test(
+    NAME openfhe_m5_artifact_validator_contract
+    COMMAND "${MOAI_PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/tests/test_validate_openfhe_m5_artifact.py"
+  )
+  set_tests_properties(openfhe_m5_artifact_validator_contract PROPERTIES
+    LABELS "m5;plaintext;artifact"
+    TIMEOUT 60
+  )
+
+  add_test(
+    NAME openfhe_encoder12_artifact_runner_contract
+    COMMAND "${MOAI_PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/tests/test_run_openfhe_encoder12_artifact.py"
+  )
+  set_tests_properties(openfhe_encoder12_artifact_runner_contract PROPERTIES
+    LABELS "m5;plaintext;artifact"
+    TIMEOUT 60
+  )
+
+  add_test(
     NAME moai_trace_contract
     COMMAND "${MOAI_PYTHON_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/scripts/validate_moai_trace_contract.py"
@@ -256,7 +287,7 @@ if(BUILD_TESTING)
             --manifest "${CMAKE_SOURCE_DIR}/config/moai_encoder_trace.json"
   )
   set_tests_properties(openfhe_encoder_trace_contract PROPERTIES
-    LABELS "m4;prerequisite;plaintext;trace;slow"
+    LABELS "m4;m5;prerequisite;plaintext;trace;slow"
     TIMEOUT 900
   )
 
@@ -266,7 +297,7 @@ if(BUILD_TESTING)
             "${CMAKE_SOURCE_DIR}/tests/test_validate_openfhe_encoder_trace.py"
   )
   set_tests_properties(openfhe_encoder_trace_validator_contract PROPERTIES
-    LABELS "m4;prerequisite;plaintext;trace;slow"
+    LABELS "m4;m5;prerequisite;plaintext;trace;slow"
     TIMEOUT 900
   )
 
@@ -400,6 +431,59 @@ if(BUILD_TESTING)
   )
 
   add_executable(
+    openfhe_encoder_12_layer_smoke
+    tests/openfhe_encoder_12_layer_smoke.cpp
+    tests/support/moai_encoder_fixture.cpp
+    tests/support/moai_encoder_plaintext_oracle.cpp
+  )
+  target_include_directories(openfhe_encoder_12_layer_smoke PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+  )
+  target_link_libraries(openfhe_encoder_12_layer_smoke PRIVATE
+    moai::openfhe_client
+    moai::openfhe_server
+  )
+  set_target_properties(
+    openfhe_encoder_12_layer_smoke
+    PROPERTIES BUILD_RPATH "${OpenFHE_LIBDIR}"
+  )
+  target_link_options(
+    openfhe_encoder_12_layer_smoke
+    PRIVATE "-Wl,--disable-new-dtags"
+  )
+  add_test(
+    NAME openfhe_encoder_12_layer_preflight
+    COMMAND openfhe_encoder_12_layer_smoke
+            --data-root "${MOAI_TRACE_DATA_ROOT}"
+            --preflight-only
+  )
+  set_tests_properties(openfhe_encoder_12_layer_preflight PROPERTIES
+    LABELS "plaintext;fast;m5;encoder;oracle;trace"
+    TIMEOUT 300
+  )
+  add_test(
+    NAME openfhe_encoder_12_layer_crypto_preflight
+    COMMAND openfhe_encoder_12_layer_smoke
+            --data-root "${MOAI_TRACE_DATA_ROOT}"
+            --crypto-preflight-only
+  )
+  set_tests_properties(openfhe_encoder_12_layer_crypto_preflight PROPERTIES
+    LABELS "openfhe;slow;m5;encoder;server-only;trace"
+    RUN_SERIAL TRUE
+    TIMEOUT 300
+  )
+  add_test(
+    NAME openfhe_encoder_12_layer_smoke
+    COMMAND openfhe_encoder_12_layer_smoke
+            --data-root "${MOAI_TRACE_DATA_ROOT}"
+  )
+  set_tests_properties(openfhe_encoder_12_layer_smoke PROPERTIES
+    LABELS "openfhe;very-slow;m5;encoder;server-only;trace"
+    RUN_SERIAL TRUE
+    TIMEOUT 64800
+  )
+
+  add_executable(
     openfhe_encoder_plaintext_oracle_smoke
     tests/openfhe_encoder_plaintext_oracle_smoke.cpp
     tests/support/moai_encoder_fixture.cpp
@@ -425,7 +509,7 @@ if(BUILD_TESTING)
             --data-root "${MOAI_TRACE_DATA_ROOT}"
   )
   set_tests_properties(openfhe_encoder_plaintext_oracle_smoke PROPERTIES
-    LABELS "plaintext;fast;m4;encoder;oracle;trace"
+    LABELS "plaintext;fast;m4;m5;encoder;oracle;trace"
     TIMEOUT 300
   )
 

@@ -139,6 +139,7 @@ SoftmaxResult NonlinearOps::SoftmaxWithCheckpoints(
     SoftmaxResult result;
     const auto shift_slots = MaskedConstant(active_mask, public_shift);
     auto shifted = server_.SubtractPlain(logits, {shift_slots});
+    result.shifted_logits = shifted;
     result.exponentials = EvaluatePolynomial(
         shifted,
         contracts_.softmax_exponential,
@@ -232,6 +233,7 @@ SoftmaxResult NonlinearOps::MultiHeadSoftmaxWithCheckpoints(
 
     SoftmaxResult result;
     auto shifted = server_.SubtractPlain(logits_by_key, {shift_slots});
+    result.shifted_logits = shifted;
     if (contracts_.softmax_exponential.required_depth !=
             kPaperCompatFeaturePackedSoftmaxPreBootstrapDepth ||
         contracts_.softmax_exponential.coefficient_sha256 !=
@@ -401,6 +403,14 @@ CipherTensor NonlinearOps::FeaturePackedLayerNorm(
     const std::vector<double>& gamma,
     const std::vector<double>& beta,
     PaperCompatLayerNormSite site) {
+    return FeaturePackedLayerNormWithCheckpoints(input, gamma, beta, site).output;
+}
+
+LayerNormResult NonlinearOps::FeaturePackedLayerNormWithCheckpoints(
+    const CipherTensor& input,
+    const std::vector<double>& gamma,
+    const std::vector<double>& beta,
+    PaperCompatLayerNormSite site) {
     if (input.empty() || input.packing.layout != PackingLayout::kContiguous ||
         input.packing.logical_shape.size() != 2 ||
         input.packing.logical_shape[0] != input.packing.active_slots ||
@@ -469,6 +479,8 @@ CipherTensor NonlinearOps::FeaturePackedLayerNorm(
     variance = server_.AddPlain(variance, {safe_variance_add});
     variance = server_.Bootstrap(variance);
 
+    LayerNormResult result;
+    result.normalized_variance = variance;
     const auto inverse_scaled = EvaluatePolynomial(
         variance,
         contracts_.layernorm_inverse_sqrt,
@@ -486,7 +498,8 @@ CipherTensor NonlinearOps::FeaturePackedLayerNorm(
     auto output = server_.Rescale(server_.MultiplyPlain(
         normalized,
         {server_.EncodeModelVector(gamma_slots, normalized.packing)}));
-    return server_.AddPlain(output, {beta_slots});
+    result.output = server_.AddPlain(output, {beta_slots});
+    return result;
 }
 
 CipherTensor NonlinearOps::Affine(

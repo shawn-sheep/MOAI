@@ -42,10 +42,19 @@ struct FeaturePackedAttentionResult {
     // the encrypted Q*K/sqrt(head_dimension) score for that head.
     CipherTensor scaled_scores;
 
+    // Query-major [query * token_count + key], after the frozen public
+    // layer/head shifts and exactly as consumed by the exponential polynomial.
+    CipherTensor shifted_logits;
+
     // Query-major [query * token_count + key]. Every slot in a head contains
     // that key's encrypted probability under the frozen per-layer/head shift
     // and exp/reciprocal contracts.
     CipherTensor probabilities;
+
+    // One ciphertext per query.  The active head spans contain the encrypted
+    // Softmax denominator after native bootstrap, exactly as consumed by the
+    // reciprocal polynomial.  This is a client-side range-check checkpoint.
+    CipherTensor denominator_after_bootstrap;
 
     // One ciphertext per query containing the encrypted weighted V sum before
     // the native bootstrap and public prefix cleanup. This remains an explicit

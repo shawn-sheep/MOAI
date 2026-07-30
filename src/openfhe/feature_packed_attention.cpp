@@ -313,6 +313,16 @@ FeaturePackedAttentionResult FeaturePackedAttention::Evaluate(
             layer,
             spec.head_dimension);
         AppendTensor(
+            result.shifted_logits,
+            softmax.shifted_logits,
+            spec.block_dimension,
+            "attention shifted logits");
+        AppendTensor(
+            result.denominator_after_bootstrap,
+            softmax.denominator_after_bootstrap,
+            spec.block_dimension,
+            "attention denominator after bootstrap");
+        AppendTensor(
             result.probabilities,
             softmax.output,
             spec.block_dimension,

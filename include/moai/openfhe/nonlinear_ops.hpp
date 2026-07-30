@@ -34,10 +34,19 @@ struct FeedForwardResult {
 };
 
 struct SoftmaxResult {
+    CipherTensor shifted_logits;
     CipherTensor exponentials;
     CipherTensor denominator_before_bootstrap;
     CipherTensor denominator_after_bootstrap;
     CipherTensor reciprocal;
+    CipherTensor output;
+};
+
+struct LayerNormResult {
+    // Ciphertext-only polynomial input after the native bootstrap.  A client
+    // may decrypt a copy to verify the frozen inverse-square-root interval;
+    // the server never derives plaintext range metadata from activations.
+    CipherTensor normalized_variance;
     CipherTensor output;
 };
 
@@ -86,6 +95,12 @@ public:
         PaperCompatLayerNormSite site);
 
     [[nodiscard]] CipherTensor FeaturePackedLayerNorm(
+        const CipherTensor& input,
+        const std::vector<double>& gamma,
+        const std::vector<double>& beta,
+        PaperCompatLayerNormSite site);
+
+    [[nodiscard]] LayerNormResult FeaturePackedLayerNormWithCheckpoints(
         const CipherTensor& input,
         const std::vector<double>& gamma,
         const std::vector<double>& beta,

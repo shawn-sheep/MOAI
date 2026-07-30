@@ -142,6 +142,7 @@ void ValidateInput(const CipherTensor& input) {
     if (input.empty() || input.size() != kPaperCompatTraceTokens ||
         input.packing.layout != PackingLayout::kContiguous ||
         input.packing.batch_lanes != 1 ||
+        input.packing.slot_count != 32768 ||
         input.packing.active_slots != kPaperCompatFeatureBlock ||
         input.packing.encoded_slots != kPaperCompatFeatureBlock ||
         input.packing.logical_shape != std::vector<std::size_t>{
@@ -196,7 +197,34 @@ CipherTensor BootstrapAndMask(
     return MaskAndRescale(server, output, mask, placement);
 }
 
+CipherTensor CloneCipherTensorForObserver(const CipherTensor& input) {
+    ValidateInput(input);
+    CipherTensor snapshot;
+    snapshot.packing = input.packing;
+    snapshot.ciphertexts.reserve(input.size());
+    for (const auto& ciphertext : input.ciphertexts) {
+        snapshot.ciphertexts.push_back(ciphertext->Clone());
+    }
+    return snapshot;
+}
+
 }  // namespace
+
+void RequirePaperCompatInterLayerHandoff(
+    const CipherTensor& input,
+    const ServerRuntime& server) {
+    ValidateInput(input);
+    const double scale_bits = std::log2(input.packing.scaling_factor);
+    if (input.packing.level != 19 ||
+        input.packing.noise_scale_degree != 2 ||
+        server.RemainingLevels(input) != 27 ||
+        !std::isfinite(scale_bits) ||
+        std::abs(scale_bits - 100.0) > 1e-3) {
+        throw std::runtime_error(
+            "inter-layer encoder handoff must match the frozen "
+            "(19,2,27,2^100,5) schedule");
+    }
+}
 
 std::vector<int32_t> FeaturePackedEncoderRotationIndices() {
     std::set<int32_t> indices;
@@ -271,11 +299,15 @@ EncoderLayerResult FeaturePackedEncoderLayer::Evaluate(
         kHiddenAffineSpec);
     checkpoints.attention_residual =
         server_.Add(checkpoints.self_projection, input);
-    checkpoints.attention_layernorm = nonlinear_.FeaturePackedLayerNorm(
+    auto attention_layernorm =
+        nonlinear_.FeaturePackedLayerNormWithCheckpoints(
         checkpoints.attention_residual,
         weights.attention_layernorm_gamma,
         weights.attention_layernorm_beta,
         PaperCompatLayerNormSite::kAttentionResidual);
+    checkpoints.attention_layernorm_normalized_variance =
+        std::move(attention_layernorm.normalized_variance);
+    checkpoints.attention_layernorm = std::move(attention_layernorm.output);
 
     for (std::size_t block = 0;
          block < kPaperCompatIntermediateBlocks;
@@ -338,13 +370,109 @@ EncoderLayerResult FeaturePackedEncoderLayer::Evaluate(
         checkpoints.output_residual_before_bootstrap,
         hidden_mask,
         "pre-output-LayerNorm bootstrap mask");
-    checkpoints.output_layernorm = nonlinear_.FeaturePackedLayerNorm(
+    auto output_layernorm = nonlinear_.FeaturePackedLayerNormWithCheckpoints(
         checkpoints.output_residual_after_bootstrap,
         weights.output_layernorm_gamma,
         weights.output_layernorm_beta,
         PaperCompatLayerNormSite::kFeedForwardResidual);
+    checkpoints.output_layernorm_normalized_variance =
+        std::move(output_layernorm.normalized_variance);
+    checkpoints.output_layernorm = std::move(output_layernorm.output);
     result.output = checkpoints.output_layernorm;
     return result;
+}
+
+EncoderStackResult FeaturePackedEncoder::Evaluate(
+    CipherTensor input,
+    const std::vector<EncoderLayerWeights>& weights,
+    EncoderCiphertextObserver* observer) {
+    return EvaluateImpl(
+        std::move(input),
+        weights,
+        kPaperCompatEncoderLayers,
+        observer);
+}
+
+EncoderStackResult FeaturePackedEncoder::EvaluatePrefixForDiagnostics(
+    CipherTensor input,
+    const std::vector<EncoderLayerWeights>& weights,
+    std::size_t layer_count,
+    EncoderCiphertextObserver* observer) {
+    if (layer_count == 0 || layer_count >= kPaperCompatEncoderLayers) {
+        throw std::invalid_argument(
+            "diagnostic encoder prefix must contain between 1 and 11 layers");
+    }
+    return EvaluateImpl(std::move(input), weights, layer_count, observer);
+}
+
+EncoderStackResult FeaturePackedEncoder::EvaluateImpl(
+    CipherTensor input,
+    const std::vector<EncoderLayerWeights>& weights,
+    std::size_t layer_count,
+    EncoderCiphertextObserver* observer) {
+    ValidateInput(input);
+    if (weights.size() != kPaperCompatEncoderLayers) {
+        throw std::invalid_argument(
+            "paper_compat encoder requires exactly 12 public weight sets");
+    }
+    for (std::size_t index = 0; index < weights.size(); ++index) {
+        ValidateWeights(weights[index]);
+        if (weights[index].layer_index != index) {
+            throw std::invalid_argument(
+                "paper_compat encoder weights must be ordered layers 0 through 11");
+        }
+    }
+    server_.RequireEvaluationKeys(FeaturePackedEncoderRotationIndices(), true);
+    const double input_scale_bits = std::log2(input.packing.scaling_factor);
+    if (input.packing.level != 29 ||
+        input.packing.noise_scale_degree != 1 ||
+        server_.RemainingLevels(input) != 18 ||
+        !std::isfinite(input_scale_bits) ||
+        std::abs(input_scale_bits - 50.0) > 1e-3) {
+        throw std::runtime_error(
+            "initial encoder input must match the frozen (29,1,18,2^50) schedule");
+    }
+
+    const auto hidden_mask = PrefixMask(kPaperCompatHiddenSize);
+    auto current = std::move(input);
+    for (std::size_t index = 0; index < layer_count; ++index) {
+        if (index > 0) {
+            RequirePaperCompatInterLayerHandoff(current, server_);
+        }
+        // OpenFHE may adjust shared ciphertext metadata while automatically
+        // aligning operands.  Preserve a deep ciphertext-only pre-layer
+        // snapshot for client validation; a shared_ptr copy is not a snapshot.
+        const auto input_snapshot = observer == nullptr
+            ? CipherTensor{}
+            : CloneCipherTensorForObserver(current);
+        const RunMetrics metrics_before_layer = server_.metrics();
+        auto layer_result = layer_.Evaluate(current, weights[index]);
+        const RunMetrics metrics_after_layer = server_.metrics();
+        const bool refreshed = index + 1 < layer_count;
+        CipherTensor next;
+        if (refreshed) {
+            next = BootstrapAndMask(
+                server_,
+                layer_result.output,
+                hidden_mask,
+                "inter-layer encoder refresh mask");
+        }
+        const RunMetrics metrics_after_refresh = server_.metrics();
+        if (observer != nullptr) {
+            observer->Observe({
+                index,
+                refreshed,
+                input_snapshot,
+                layer_result,
+                metrics_before_layer,
+                metrics_after_layer,
+                metrics_after_refresh});
+        }
+        current = refreshed
+            ? std::move(next)
+            : std::move(layer_result.output);
+    }
+    return {std::move(current)};
 }
 
 }  // namespace moai::openfhe

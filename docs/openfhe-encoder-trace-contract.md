@@ -208,3 +208,97 @@ and all 41 frozen inputs are rehashed before and after every execution. Any dirt
 remote SHA mismatch, binary drift, failed child process, threshold violation, or
 artifact-validator rejection removes the unvalidated run directory and returns
 nonzero.
+
+## M5 encrypted 12-layer gate
+
+M5 starts from the same client-encrypted five-token layer-0 input and calls the
+server-side encoder once with exactly 12 ordered public weight sets. It never resets an
+activation from the plaintext trace. Layers 0 through 10 pass their raw ciphertext
+output through one native bootstrap and a public 768-prefix mask before the next layer;
+layer 11 returns its raw ciphertext output for final client decryption. Therefore the
+formal chain has 12 server layer evaluations and exactly 11 inter-layer refreshes.
+
+The server target owns only the ciphertexts, public weights, and evaluation-key bundle.
+It has no private-key, decryptor, or plaintext-activation API. The correctness executable
+also links the client runtime so a client-owned observer can decrypt cloned ciphertext
+checkpoints and validate them; that composition does not move decryption across the
+server API and is not a claim of operating-system process isolation.
+
+The exact metadata schedule was frozen from the r6 two-layer live calibration. Every
+tuple below is `(level, noise-scale degree, remaining levels, canonical scale bits,
+ciphertext count)`. Runtime `log2(scale)` must be finite and within `1e-3` of the
+canonical value.
+
+| Position | Layer 0 | Layers 1-11 |
+|---|---|---|
+| Layer input | `(29,1,18,50,5)` | `(19,2,27,100,5)` |
+| Softmax denominator after bootstrap | `(18,2,28,100,5)` | `(18,2,28,100,5)` |
+| Attention LayerNorm variance after bootstrap | `(18,2,28,100,5)` | `(18,2,28,100,5)` |
+| Output LayerNorm variance after bootstrap | `(18,2,28,100,5)` | `(18,2,28,100,5)` |
+| Raw attention output | `(40,2,6,100,5)` | `(31,2,15,100,5)` |
+| First LayerNorm output | `(32,2,14,100,5)` | `(29,2,17,100,5)` |
+| FFN output projection | `(45,2,1,100,5)` | `(42,2,4,100,5)` |
+| Raw encoder output | `(29,2,17,100,5)` | `(29,2,17,100,5)` |
+
+The depth-47 schedule consumes 12 used levels from each layer input to raw attention,
+14 levels from the layer-0 first-LayerNorm polynomial checkpoint to its output and 11
+thereafter, 13 levels from first LayerNorm output through the FFN projection, and 11
+levels from the second-LayerNorm polynomial checkpoint to raw output. Every inter-layer
+refresh recovers 10 used levels. The production encoder checks the complete
+`(19,2,27,2^100,5)` handoff before starting every later layer, even when no diagnostic
+observer is attached.
+
+Each layer freezes the operation tuple below; each of the first 11 post-layer refreshes
+freezes the second tuple. Counts are exact, not upper bounds:
+
+| Scope | Rotations | Ct-Pt mul | Ct-Ct mul | Rescale requests | Chebyshev evals | Estimated polynomial mul | Bootstraps | Bootstrap iterations |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| One encoder layer | 6300 | 51865 | 95 | 800 | 55 | 1150 | 25 | 50 |
+| One inter-layer refresh | 0 | 5 | 0 | 5 | 0 | 0 | 5 | 10 |
+| Formal 12-layer total | 75600 | 622435 | 1140 | 9655 | 660 | 13800 | 355 | 710 |
+
+The client validates every encrypted layer input and output against the corresponding
+chained frozen-polynomial oracle and also gates the exact-trace diagnostic. Every such
+gate requires rel-L2 `<= 5e-2`, cosine `>= 0.99`, and finite values. The client decrypts
+the Softmax shifted logits and denominator, both LayerNorm normalized variances, and all
+GELU inputs and requires them to remain inside the M3 frozen polynomial intervals.
+Each layer must expose exactly 28 unique zero-valued encoded logical checkpoints. The
+16 base labels are `encoder_input`, `query`, `key`, `value`, `scaled_scores`,
+`shifted_logits`, `probabilities`, the attention output before and after bootstrap
+cleanup, `self_projection`, `attention_residual`, `attention_layernorm`,
+`output_projection`, the output residual before and after bootstrap, and
+`encoder_output`. Each of the three FFN blocks additionally contributes
+`intermediate_pre_activation_i`, `intermediate_polynomial_output_i`,
+`intermediate_activation_i`, and `output_contribution_i`. Missing, extra, or duplicate
+labels fail closed. Their encoded inactive/cross-lane maximum absolute value must be
+`<= 1e-6`. The 16 base tensors and three `output_contribution_i` tensors freeze active
+width 768; the other nine intermediate tensors freeze active width 1024. A wrong width
+fails closed. The nine full-width tensors have an empty encoded inactive tail, so their
+presence proves registry completeness but is not evidence about physical CKKS slots
+beyond the 1024 encoded values. This contract does not claim inspection of the unused
+remainder of the 32768-slot ring capacity.
+
+The Softmax denominator and the two LayerNorm normalized-variance tensors are three
+separate public value-one sentinel channels. Their actual inactive values must remain
+inside the corresponding frozen reciprocal or inverse-square-root interval. Deviation
+from one is recorded as a diagnostic maximum and is not required to satisfy the
+zero-inactive `1e-6` threshold.
+
+The plaintext preflight proves only fixture/oracle consistency and negative API
+contracts. Metadata calibration and exact two-layer prefix modes are explicitly marked
+`artifact_eligible=false`; their stdout cannot be mixed into a formal artifact. The
+formal CTest must execute all 12 layers from a clean milestone commit. After that commit
+is pushed and the local, tracking, and live remote SHAs agree, run:
+
+```bash
+/home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
+  scripts/run_openfhe_encoder12_artifact.py
+```
+
+The M5 runner performs one untimed-claim correctness execution, binds all 448 frozen
+inputs plus the executable by SHA-256 before and after the run, requires the exact 12
+position-specific metadata/count records, and invokes the independent schema and
+semantic validator. It does not perform the M6 one-warm-up/five-repeat benchmark and
+must emit `timing_claim=false`. A shortened diagnostic, a calibration run, a dirty-tree
+run, a remote-SHA mismatch, an input or binary hash drift, or any threshold/schema
+failure is not M5 evidence.

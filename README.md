@@ -2,14 +2,16 @@
 
 ## OpenFHE CPU migration
 
-The default build is the staged OpenFHE v1.5.1 CPU migration. It currently provides an
-M4 server-only replay of layer 1 from the frozen five-token BERT-base encoder trace, in
-addition to the M1-M3 client/server runtime, packing, linear-kernel, nonlinear, and
-native-bootstrap gates. Each token uses one 1024-slot ciphertext. The client owns the
-private key and decrypts the gated checkpoints; the server receives only ciphertexts,
+The default build is the staged OpenFHE v1.5.1 CPU migration. It includes the pushed M4
+server-only replay of layer 1 and an M5 gate that chains all 12 layers of the frozen
+five-token BERT-base encoder trace without plaintext activation resets. Each token uses
+one 1024-slot ciphertext inside the full 32768-slot CKKS ring capacity. The client owns
+the private key and decrypts gated checkpoints; the server receives only ciphertexts,
 public model weights, and an evaluation-key bundle. The only accepted parameter profile
 is `paper_compat`, which always reports `security_claim=none`. These research
-reproduction parameters do not support a 128-bit security claim.
+reproduction parameters do not support a 128-bit security claim. M5 is complete only
+after its full clean-commit ciphertext gate and fail-closed artifact validator pass;
+plaintext preflights and shortened diagnostics are not completion evidence.
 
 Configure, build, and run the fast gates:
 
@@ -92,8 +94,62 @@ one warm-up plus five measured runs with:
   scripts/run_openfhe_encoder_artifact.py
 ```
 
-M4 does not establish 12-layer ciphertext execution, task-level inference, or a
-speedup over the optional SEAL reference.
+The sealed M4 artifact establishes only the one-layer result; it does not by itself
+establish 12-layer ciphertext execution, task-level inference, or a speedup over the
+optional SEAL reference.
+
+The M5 target consumes the client-encrypted layer-0 input once, evaluates all 12 ordered
+public weight sets, and passes each layer output to the next only after the frozen native
+bootstrap plus public 768-prefix mask. The integration executable contains a client
+observer solely to decrypt and validate ciphertext checkpoints. The server library and
+API do not receive a private key, a decryptor, or plaintext activations; this is an API
+trust boundary, not a claim of process isolation.
+
+Run the fail-before-HE contracts and the inexpensive plaintext gates first:
+
+```bash
+ctest --test-dir build-openfhe --output-on-failure \
+  -R 'openfhe_(m5_artifact_(schema|validator)_contract|encoder12_artifact_runner_contract|encoder_12_layer_(preflight|crypto_preflight))'
+```
+
+An explicitly labelled two-layer exact-prefix run may be used to inspect the layer-0 to
+layer-1 ciphertext seam. It is never artifact-eligible and cannot replace the full gate:
+
+```bash
+./build-openfhe/openfhe_encoder_12_layer_smoke \
+  --data-root data --diagnostic-layer-count 2
+```
+
+The formal correctness gate evaluates all 12 ciphertext layers, checks every layer
+against the chained frozen-polynomial oracle and exact-trace diagnostic, validates every
+encrypted polynomial input range on the client, and requires exactly 28 uniquely named
+zero-valued encoded logical checkpoint tensors per layer to pass the inactive/cross-lane
+`1e-6` gate. Label-to-width mapping is also frozen: 19 checkpoints expose a 768-active/
+256-inactive tail, while nine full-width intermediate checkpoints have no encoded
+inactive tail. This gate covers the 1024 explicitly encoded slots, not the unused
+remainder of the 32768-slot ring capacity. The three public value-one sentinel channels
+are separate: their actual values must stay in the frozen approximation interval, while
+deviation from one is diagnostic and is not subject to the zero-inactive threshold. Final
+acceptance bounds are rel-L2 `<= 5e-2`, cosine `>= 0.99`, and no NaN/Inf. It is a
+very-slow correctness test and does not make a latency claim:
+
+```bash
+ctest --test-dir build-openfhe --output-on-failure \
+  -R '^openfhe_encoder_12_layer_smoke$'
+```
+
+Only after that test passes on a clean milestone commit, the branch is pushed, and the
+local and live remote SHAs match, seal one non-benchmark correctness execution with:
+
+```bash
+/home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
+  scripts/run_openfhe_encoder12_artifact.py
+```
+
+The M5 runner fixes and rehashes the executable plus all frozen inputs around the run,
+requires 12 ordered layer records and 11 inter-layer refreshes, rejects diagnostic or
+calibration stdout, and delegates the sealed directory to the independent schema and
+semantic validator. M5 still excludes task-level inference and any SEAL speedup claim.
 
 ## Optional legacy SEAL reference
 

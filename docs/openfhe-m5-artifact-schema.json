@@ -1,0 +1,1229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.moai/openfhe-m5-artifact-schema-v4.json",
+  "title": "MOAI OpenFHE M5 evidence manifest v4",
+  "description": "Fail-closed schema for one non-benchmark correctness run of the server-only 12-layer OpenFHE CKKS encoder ciphertext chain, including the independent per-layer metadata schedule. This schema is independent from the frozen M3/M4 schema-v2 contract and supersedes the unpublished M5 schema-v3 draft.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "milestone",
+    "started_at",
+    "finished_at",
+    "git",
+    "commands",
+    "environment",
+    "profile",
+    "inputs",
+    "workload",
+    "contracts",
+    "metrics",
+    "gate",
+    "artifacts",
+    "claim_boundary",
+    "verdict"
+  ],
+  "properties": {
+    "schema_version": {"const": 4},
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:-]*$"
+    },
+    "milestone": {"const": "M5"},
+    "started_at": {"$ref": "#/$defs/timestamp"},
+    "finished_at": {"$ref": "#/$defs/timestamp"},
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_root",
+        "branch",
+        "local_commit",
+        "clean",
+        "tracking_ref",
+        "tracking_commit",
+        "remote_name",
+        "remote_ref",
+        "remote_commit"
+      ],
+      "properties": {
+        "repository_root": {"type": "string", "pattern": "^/"},
+        "branch": {"const": "refactor/openfhe-cpu"},
+        "local_commit": {"$ref": "#/$defs/git_sha"},
+        "clean": {"const": true},
+        "tracking_ref": {"const": "refs/remotes/origin/refactor/openfhe-cpu"},
+        "tracking_commit": {"$ref": "#/$defs/git_sha"},
+        "remote_name": {"const": "origin"},
+        "remote_ref": {"const": "refs/heads/refactor/openfhe-cpu"},
+        "remote_commit": {"$ref": "#/$defs/git_sha"}
+      }
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {"$ref": "#/$defs/command"}
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture",
+        "compiler",
+        "cmake",
+        "python",
+        "openfhe_version",
+        "openfhe_prefix",
+        "wsl"
+      ],
+      "properties": {
+        "os": {"type": "string", "minLength": 1},
+        "architecture": {"type": "string", "minLength": 1},
+        "compiler": {"type": "string", "minLength": 1},
+        "cmake": {"type": "string", "minLength": 1},
+        "python": {"type": "string", "minLength": 1},
+        "openfhe_version": {"const": "1.5.1"},
+        "openfhe_prefix": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1"},
+        "wsl": {"const": true}
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "security_claim",
+        "warning",
+        "source_config_path",
+        "source_config_sha256",
+        "source_config_bytes",
+        "effective_profile_locator",
+        "canonicalization",
+        "effective_profile_payload",
+        "effective_profile_sha256"
+      ],
+      "properties": {
+        "id": {"const": "paper_compat"},
+        "security_claim": {"const": "none"},
+        "warning": {
+          "const": "Research reproduction parameters only. Do not claim 128-bit security."
+        },
+        "source_config_path": {"const": "config/paper_compat_feature_packed.json"},
+        "source_config_sha256": {"$ref": "#/$defs/sha256"},
+        "source_config_bytes": {"type": "integer", "minimum": 1},
+        "effective_profile_locator": {"const": "/effective_profile"},
+        "canonicalization": {"const": "MOAI-json-sort-keys-compact-utf8-v1"},
+        "effective_profile_payload": {"type": "object", "minProperties": 1},
+        "effective_profile_sha256": {
+          "const": "94f30e628e21f02146ce7ed9820194eabba3820f6e1e17176a31f8c5acf8b0be"
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 448,
+      "maxItems": 448,
+      "items": {"$ref": "#/$defs/input_file"}
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "backend",
+        "executable_path",
+        "executable_sha256",
+        "executable_bytes",
+        "repeat_count",
+        "warmup_count",
+        "timing_claim",
+        "latency_kind"
+      ],
+      "properties": {
+        "scope": {
+          "const": "M5 server-only five-token BERT-base 12-layer encoder ciphertext-chain trace replay"
+        },
+        "backend": {"const": "OpenFHE CKKS CPU"},
+        "executable_path": {"const": "build-openfhe/openfhe_encoder_12_layer_smoke"},
+        "executable_sha256": {"$ref": "#/$defs/sha256"},
+        "executable_bytes": {"type": "integer", "minimum": 1},
+        "repeat_count": {"const": 1},
+        "warmup_count": {"const": 0},
+        "timing_claim": {"const": false},
+        "latency_kind": {"const": "non_benchmark_diagnostic"}
+      }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approximation_config_path",
+        "approximation_config_sha256",
+        "channel_scales_config_path",
+        "channel_scales_config_sha256",
+        "encoder_trace_contract_path",
+        "encoder_trace_contract_sha256",
+        "profile_config_path",
+        "profile_config_sha256",
+        "execution",
+        "crypto_preflight",
+        "metadata_schedule",
+        "thresholds",
+        "polynomial_intervals",
+        "layer_input_identities"
+      ],
+      "properties": {
+        "approximation_config_path": {"const": "config/openfhe_approximations.json"},
+        "approximation_config_sha256": {"$ref": "#/$defs/sha256"},
+        "channel_scales_config_path": {"const": "config/moai_trace_channel_scales.json"},
+        "channel_scales_config_sha256": {"$ref": "#/$defs/sha256"},
+        "encoder_trace_contract_path": {"const": "config/moai_encoder_trace.json"},
+        "encoder_trace_contract_sha256": {"$ref": "#/$defs/sha256"},
+        "profile_config_path": {"const": "config/paper_compat_feature_packed.json"},
+        "profile_config_sha256": {"$ref": "#/$defs/sha256"},
+        "execution": {"$ref": "#/$defs/execution_contract"},
+        "crypto_preflight": {"$ref": "#/$defs/crypto_preflight"},
+        "metadata_schedule": {"$ref": "#/$defs/metadata_schedule"},
+        "thresholds": {"$ref": "#/$defs/thresholds"},
+        "polynomial_intervals": {"$ref": "#/$defs/polynomial_intervals"},
+        "layer_input_identities": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "items": {"$ref": "#/$defs/layer_input_identity"}
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repeat_count",
+        "successful_repeats",
+        "warmup_count",
+        "timing_claim",
+        "latency_kind",
+        "elapsed_seconds",
+        "peak_rss_kib",
+        "checkpoint_metadata_sha256",
+        "phase_latency_ms",
+        "layers",
+        "final_quality",
+        "final_metadata",
+        "operation_counts",
+        "finite"
+      ],
+      "properties": {
+        "repeat_count": {"const": 1},
+        "successful_repeats": {"const": 1},
+        "warmup_count": {"const": 0},
+        "timing_claim": {"const": false},
+        "latency_kind": {"const": "non_benchmark_diagnostic"},
+        "elapsed_seconds": {"type": "number", "minimum": 0.000000001},
+        "peak_rss_kib": {"type": "integer", "minimum": 1},
+        "checkpoint_metadata_sha256": {"$ref": "#/$defs/sha256"},
+        "phase_latency_ms": {"$ref": "#/$defs/phase_latency"},
+        "layers": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "prefixItems": [
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/layer0_metric_regime"}, {"$ref": "#/$defs/layer_position_0"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_1"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_2"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_3"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_4"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_5"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_6"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_7"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_8"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_9"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_10"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_11"}]}
+          ]
+        },
+        "final_quality": {"$ref": "#/$defs/final_quality"},
+        "final_metadata": {
+          "allOf": [
+            {"$ref": "#/$defs/tensor_metadata"},
+            {"$ref": "#/$defs/observed_raw_output_metadata"}
+          ]
+        },
+        "operation_counts": {"$ref": "#/$defs/total_operation_counts"},
+        "finite": {"const": true}
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "decision", "checks"],
+      "properties": {
+        "passed": {"const": true},
+        "decision": {"const": "PASS_M5_12_LAYER_OPENFHE_ENCODER"},
+        "checks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "build",
+            "trust_boundary",
+            "input_integrity",
+            "ciphertext_chain",
+            "approximation_ranges",
+            "correctness",
+            "artifact_integrity",
+            "remote_sha"
+          ],
+          "properties": {
+            "build": {"const": "PASS"},
+            "trust_boundary": {"const": "PASS"},
+            "input_integrity": {"const": "PASS"},
+            "ciphertext_chain": {"const": "PASS"},
+            "approximation_ranges": {"const": "PASS"},
+            "correctness": {"const": "PASS"},
+            "artifact_integrity": {"const": "PASS"},
+            "remote_sha": {"const": "PASS"}
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/artifact_file"}
+    },
+    "claim_boundary": {
+      "type": "array",
+      "minItems": 3,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "verdict": {"const": "GO"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "git_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "repository_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "cwd", "exit_code", "phase"],
+      "properties": {
+        "command": {"type": "string", "minLength": 1},
+        "cwd": {"type": "string", "pattern": "^/"},
+        "exit_code": {"const": 0},
+        "phase": {"const": "artifact_generation"},
+        "started_at": {"$ref": "#/$defs/timestamp"},
+        "finished_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "input_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "media_type", "role"],
+      "properties": {
+        "path": {"$ref": "#/$defs/repository_path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "media_type": {"enum": ["application/json", "text/csv"]},
+        "role": {"enum": ["configuration", "weights", "trace"]}
+      }
+    },
+    "artifact_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "media_type", "role"],
+      "properties": {
+        "path": {"$ref": "#/$defs/repository_path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "media_type": {"enum": ["text/plain", "text/csv"]},
+        "role": {"enum": ["stdout", "metrics", "checksum"]}
+      }
+    },
+    "execution_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "encoder_layers",
+        "layer_ids",
+        "trace_shape",
+        "feature_block_size",
+        "chain_mode",
+        "client_encrypt_calls",
+        "encrypted_input_ciphertexts",
+        "plaintext_activation_resets",
+        "server_layer_evaluations",
+        "inter_layer_refreshes",
+        "checkpoint_decryption_owner",
+        "final_decryption_owner",
+        "server_private_key_present",
+        "server_decryptions",
+        "server_plaintext_activations",
+        "approximation_range_status",
+        "quality_reference"
+      ],
+      "properties": {
+        "mode": {"const": "server-only"},
+        "encoder_layers": {"const": 12},
+        "layer_ids": {"$ref": "#/$defs/layer_ids"},
+        "trace_shape": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer"}},
+        "feature_block_size": {"const": 1024},
+        "chain_mode": {"const": "ciphertext_output_to_next_input"},
+        "client_encrypt_calls": {"const": 1},
+        "encrypted_input_ciphertexts": {"const": 5},
+        "plaintext_activation_resets": {"const": 0},
+        "server_layer_evaluations": {"const": 12},
+        "inter_layer_refreshes": {"const": 11},
+        "checkpoint_decryption_owner": {"const": "client"},
+        "final_decryption_owner": {"const": "client"},
+        "server_private_key_present": {"const": false},
+        "server_decryptions": {"const": 0},
+        "server_plaintext_activations": {"const": false},
+        "approximation_range_status": {"const": "all_client_validated"},
+        "quality_reference": {
+          "const": "12-layer chained frozen polynomial oracle from config/moai_encoder_trace.json"
+        }
+      }
+    },
+    "crypto_preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "test",
+        "profile",
+        "security_claim",
+        "input_metadata",
+        "server_private_key_present",
+        "server_decryptions",
+        "server_plaintext_activations",
+        "additive_he_operations",
+        "passed"
+      ],
+      "properties": {
+        "test": {"const": "openfhe_encoder_12_layer_crypto_preflight"},
+        "profile": {"const": "paper_compat"},
+        "security_claim": {"const": "none"},
+        "input_metadata": {
+          "allOf": [
+            {"$ref": "#/$defs/tensor_metadata"},
+            {"$ref": "#/$defs/observed_layer0_input_metadata"}
+          ]
+        },
+        "server_private_key_present": {"const": false},
+        "server_decryptions": {"const": 0},
+        "server_plaintext_activations": {"const": false},
+        "additive_he_operations": {"const": 0},
+        "passed": {"const": true}
+      }
+    },
+    "layer_ids": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": {"type": "integer", "minimum": 0, "maximum": 11}
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "per_layer_relative_l2_max",
+        "per_layer_cosine_min",
+        "final_relative_l2_max",
+        "final_cosine_min",
+        "inactive_max_abs",
+        "inactive_sentinel_in_interval_required",
+        "finite_required"
+      ],
+      "properties": {
+        "per_layer_relative_l2_max": {"const": 0.05},
+        "per_layer_cosine_min": {"const": 0.99},
+        "final_relative_l2_max": {"const": 0.05},
+        "final_cosine_min": {"const": 0.99},
+        "inactive_max_abs": {"const": 0.000001},
+        "inactive_sentinel_in_interval_required": {"const": true},
+        "finite_required": {"const": true}
+      }
+    },
+    "interval": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"type": "number"}
+    },
+    "polynomial_intervals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "softmax_shifted_logits",
+        "softmax_denominator",
+        "ln1_normalized_variance",
+        "gelu_input",
+        "ln2_normalized_variance"
+      ],
+      "properties": {
+        "softmax_shifted_logits": {"$ref": "#/$defs/interval"},
+        "softmax_denominator": {"$ref": "#/$defs/interval"},
+        "ln1_normalized_variance": {"$ref": "#/$defs/interval"},
+        "gelu_input": {"$ref": "#/$defs/interval"},
+        "ln2_normalized_variance": {"$ref": "#/$defs/interval"}
+      }
+    },
+    "layer_input_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layer_id",
+        "weight_file_count",
+        "trace_file_count",
+        "weight_bundle_sha256",
+        "trace_bundle_sha256"
+      ],
+      "properties": {
+        "layer_id": {"type": "integer", "minimum": 0, "maximum": 11},
+        "weight_file_count": {"const": 16},
+        "trace_file_count": {"const": 21},
+        "weight_bundle_sha256": {"$ref": "#/$defs/sha256"},
+        "trace_bundle_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_l2", "cosine", "max_absolute"],
+      "properties": {
+        "relative_l2": {"type": "number", "minimum": 0, "maximum": 0.05},
+        "cosine": {"type": "number", "minimum": 0.99, "maximum": 1.000000000001},
+        "max_absolute": {"type": "number", "minimum": 0}
+      }
+    },
+    "final_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_l2", "cosine", "max_absolute", "inactive_max_abs", "inactive_sentinel_max_error", "inactive_sentinel_range_status"],
+      "properties": {
+        "relative_l2": {"type": "number", "minimum": 0, "maximum": 0.05},
+        "cosine": {"type": "number", "minimum": 0.99, "maximum": 1.000000000001},
+        "max_absolute": {"type": "number", "minimum": 0},
+        "inactive_max_abs": {"type": "number", "minimum": 0, "maximum": 0.000001},
+        "inactive_sentinel_max_error": {"type": "number", "minimum": 0},
+        "inactive_sentinel_range_status": {"const": "all_client_validated"}
+      }
+    },
+    "tensor_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "noise_scale_degree", "remaining_levels", "scale_bits", "expected_scale_bits", "ciphertext_count"],
+      "properties": {
+        "level": {"type": "integer", "minimum": 0},
+        "noise_scale_degree": {"type": "integer", "minimum": 1},
+        "remaining_levels": {"type": "integer", "minimum": 1},
+        "scale_bits": {"type": "number", "minimum": 49.999, "maximum": 100.001},
+        "expected_scale_bits": {"enum": [50, 100]},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "layer0_input_metadata": {
+      "const": {
+        "level": 29,
+        "noise_scale_degree": 1,
+        "remaining_levels": 18,
+        "scale_bits": 50,
+        "expected_scale_bits": 50,
+        "ciphertext_count": 5
+      }
+    },
+    "handoff_input_metadata": {
+      "const": {
+        "level": 19,
+        "noise_scale_degree": 2,
+        "remaining_levels": 27,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "polynomial_checkpoint_metadata": {
+      "const": {
+        "level": 18,
+        "noise_scale_degree": 2,
+        "remaining_levels": 28,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "raw_output_metadata": {
+      "const": {
+        "level": 29,
+        "noise_scale_degree": 2,
+        "remaining_levels": 17,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "layer0_attention_output_metadata": {
+      "const": {
+        "level": 40,
+        "noise_scale_degree": 2,
+        "remaining_levels": 6,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "post_refresh_attention_output_metadata": {
+      "const": {
+        "level": 31,
+        "noise_scale_degree": 2,
+        "remaining_levels": 15,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "layer0_ln1_output_metadata": {
+      "const": {
+        "level": 32,
+        "noise_scale_degree": 2,
+        "remaining_levels": 14,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "post_refresh_ln1_output_metadata": {
+      "const": {
+        "level": 29,
+        "noise_scale_degree": 2,
+        "remaining_levels": 17,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "layer0_ffn_output_metadata": {
+      "const": {
+        "level": 45,
+        "noise_scale_degree": 2,
+        "remaining_levels": 1,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "post_refresh_ffn_output_metadata": {
+      "const": {
+        "level": 42,
+        "noise_scale_degree": 2,
+        "remaining_levels": 4,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "observed_layer0_input_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 29},
+        "noise_scale_degree": {"const": 1},
+        "remaining_levels": {"const": 18},
+        "scale_bits": {"type": "number", "minimum": 49.999, "maximum": 50.001},
+        "expected_scale_bits": {"const": 50},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_handoff_input_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 19},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 27},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_polynomial_checkpoint_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 18},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 28},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_raw_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 29},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 17},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_layer0_attention_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 40},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 6},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_post_refresh_attention_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 31},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 15},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_layer0_ln1_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 32},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 14},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_post_refresh_ln1_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 29},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 17},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_layer0_ffn_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 45},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 1},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_post_refresh_ffn_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 42},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 4},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "metadata_schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "multiplicative_depth",
+        "used_level_formula",
+        "remaining_levels_formula",
+        "initial_layer_input",
+        "post_refresh_layer_input",
+        "post_bootstrap_polynomial_checkpoint",
+        "raw_layer_output",
+        "attention_output_by_layer_regime",
+        "ln1_output_by_layer_regime",
+        "ffn_output_by_layer_regime",
+        "relative_used_level_deltas",
+        "checkpoint_metadata_digest"
+      ],
+      "properties": {
+        "multiplicative_depth": {"const": 47},
+        "used_level_formula": {"const": "level + noise_scale_degree - 1"},
+        "remaining_levels_formula": {"const": "multiplicative_depth - used_level"},
+        "initial_layer_input": {"$ref": "#/$defs/layer0_input_metadata"},
+        "post_refresh_layer_input": {"$ref": "#/$defs/handoff_input_metadata"},
+        "post_bootstrap_polynomial_checkpoint": {"$ref": "#/$defs/polynomial_checkpoint_metadata"},
+        "raw_layer_output": {"$ref": "#/$defs/raw_output_metadata"},
+        "attention_output_by_layer_regime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layer_0", "layers_1_to_11"],
+          "properties": {
+            "layer_0": {"$ref": "#/$defs/layer0_attention_output_metadata"},
+            "layers_1_to_11": {"$ref": "#/$defs/post_refresh_attention_output_metadata"}
+          }
+        },
+        "ln1_output_by_layer_regime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layer_0", "layers_1_to_11"],
+          "properties": {
+            "layer_0": {"$ref": "#/$defs/layer0_ln1_output_metadata"},
+            "layers_1_to_11": {"$ref": "#/$defs/post_refresh_ln1_output_metadata"}
+          }
+        },
+        "ffn_output_by_layer_regime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layer_0", "layers_1_to_11"],
+          "properties": {
+            "layer_0": {"$ref": "#/$defs/layer0_ffn_output_metadata"},
+            "layers_1_to_11": {"$ref": "#/$defs/post_refresh_ffn_output_metadata"}
+          }
+        },
+        "relative_used_level_deltas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "attention_output_from_layer_input",
+            "ln1_output_from_ln1_variance",
+            "ffn_output_from_ln1_output",
+            "raw_output_from_ln2_variance"
+          ],
+          "properties": {
+            "attention_output_from_layer_input": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["layer_0", "layers_1_to_11"],
+              "properties": {
+                "layer_0": {"const": 12},
+                "layers_1_to_11": {"const": 12}
+              }
+            },
+            "ln1_output_from_ln1_variance": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["layer_0", "layers_1_to_11"],
+              "properties": {
+                "layer_0": {"const": 14},
+                "layers_1_to_11": {"const": 11}
+              }
+            },
+            "ffn_output_from_ln1_output": {"const": 13},
+            "raw_output_from_ln2_variance": {"const": 11}
+          }
+        },
+        "checkpoint_metadata_digest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "canonicalization", "layer_order", "fields"],
+          "properties": {
+            "algorithm": {"const": "SHA-256"},
+            "canonicalization": {"const": "MOAI-json-sort-keys-compact-utf8-v1"},
+            "layer_order": {"const": "0 through 11"},
+            "fields": {
+              "const": [
+                "layer_id",
+                "input_metadata",
+                "softmax_denominator_metadata",
+                "attention_output_metadata",
+                "ln1_variance_metadata",
+                "ln1_output_metadata",
+                "ffn_output_metadata",
+                "ln2_variance_metadata",
+                "raw_output_metadata"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "operation_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rotations",
+        "ct_pt_multiplications",
+        "ct_ct_multiplications",
+        "explicit_rescale_requests",
+        "chebyshev_evaluations",
+        "estimated_polynomial_multiplications",
+        "bootstraps",
+        "bootstrap_iterations"
+      ],
+      "properties": {
+        "rotations": {"type": "integer", "minimum": 0},
+        "ct_pt_multiplications": {"type": "integer", "minimum": 0},
+        "ct_ct_multiplications": {"type": "integer", "minimum": 0},
+        "explicit_rescale_requests": {"type": "integer", "minimum": 0},
+        "chebyshev_evaluations": {"type": "integer", "minimum": 0},
+        "estimated_polynomial_multiplications": {"type": "integer", "minimum": 0},
+        "bootstraps": {"type": "integer", "minimum": 0},
+        "bootstrap_iterations": {"type": "integer", "minimum": 0}
+      }
+    },
+    "layer_operation_counts": {
+      "const": {
+        "rotations": 6300,
+        "ct_pt_multiplications": 51865,
+        "ct_ct_multiplications": 95,
+        "explicit_rescale_requests": 800,
+        "chebyshev_evaluations": 55,
+        "estimated_polynomial_multiplications": 1150,
+        "bootstraps": 25,
+        "bootstrap_iterations": 50
+      }
+    },
+    "refresh_operation_counts": {
+      "enum": [
+        {
+          "rotations": 0,
+          "ct_pt_multiplications": 0,
+          "ct_ct_multiplications": 0,
+          "explicit_rescale_requests": 0,
+          "chebyshev_evaluations": 0,
+          "estimated_polynomial_multiplications": 0,
+          "bootstraps": 0,
+          "bootstrap_iterations": 0
+        },
+        {
+          "rotations": 0,
+          "ct_pt_multiplications": 5,
+          "ct_ct_multiplications": 0,
+          "explicit_rescale_requests": 5,
+          "chebyshev_evaluations": 0,
+          "estimated_polynomial_multiplications": 0,
+          "bootstraps": 5,
+          "bootstrap_iterations": 10
+        }
+      ]
+    },
+    "zero_operation_counts": {
+      "const": {
+        "rotations": 0,
+        "ct_pt_multiplications": 0,
+        "ct_ct_multiplications": 0,
+        "explicit_rescale_requests": 0,
+        "chebyshev_evaluations": 0,
+        "estimated_polynomial_multiplications": 0,
+        "bootstraps": 0,
+        "bootstrap_iterations": 0
+      }
+    },
+    "inter_layer_refresh_operation_counts": {
+      "const": {
+        "rotations": 0,
+        "ct_pt_multiplications": 5,
+        "ct_ct_multiplications": 0,
+        "explicit_rescale_requests": 5,
+        "chebyshev_evaluations": 0,
+        "estimated_polynomial_multiplications": 0,
+        "bootstraps": 5,
+        "bootstrap_iterations": 10
+      }
+    },
+    "total_operation_counts": {
+      "const": {
+        "rotations": 75600,
+        "ct_pt_multiplications": 622435,
+        "ct_ct_multiplications": 1140,
+        "explicit_rescale_requests": 9655,
+        "chebyshev_evaluations": 660,
+        "estimated_polynomial_multiplications": 13800,
+        "bootstraps": 355,
+        "bootstrap_iterations": 710
+      }
+    },
+    "cumulative_operation_counts": {
+      "enum": [
+        {"rotations": 6300, "ct_pt_multiplications": 51870, "ct_ct_multiplications": 95, "explicit_rescale_requests": 805, "chebyshev_evaluations": 55, "estimated_polynomial_multiplications": 1150, "bootstraps": 30, "bootstrap_iterations": 60},
+        {"rotations": 12600, "ct_pt_multiplications": 103740, "ct_ct_multiplications": 190, "explicit_rescale_requests": 1610, "chebyshev_evaluations": 110, "estimated_polynomial_multiplications": 2300, "bootstraps": 60, "bootstrap_iterations": 120},
+        {"rotations": 18900, "ct_pt_multiplications": 155610, "ct_ct_multiplications": 285, "explicit_rescale_requests": 2415, "chebyshev_evaluations": 165, "estimated_polynomial_multiplications": 3450, "bootstraps": 90, "bootstrap_iterations": 180},
+        {"rotations": 25200, "ct_pt_multiplications": 207480, "ct_ct_multiplications": 380, "explicit_rescale_requests": 3220, "chebyshev_evaluations": 220, "estimated_polynomial_multiplications": 4600, "bootstraps": 120, "bootstrap_iterations": 240},
+        {"rotations": 31500, "ct_pt_multiplications": 259350, "ct_ct_multiplications": 475, "explicit_rescale_requests": 4025, "chebyshev_evaluations": 275, "estimated_polynomial_multiplications": 5750, "bootstraps": 150, "bootstrap_iterations": 300},
+        {"rotations": 37800, "ct_pt_multiplications": 311220, "ct_ct_multiplications": 570, "explicit_rescale_requests": 4830, "chebyshev_evaluations": 330, "estimated_polynomial_multiplications": 6900, "bootstraps": 180, "bootstrap_iterations": 360},
+        {"rotations": 44100, "ct_pt_multiplications": 363090, "ct_ct_multiplications": 665, "explicit_rescale_requests": 5635, "chebyshev_evaluations": 385, "estimated_polynomial_multiplications": 8050, "bootstraps": 210, "bootstrap_iterations": 420},
+        {"rotations": 50400, "ct_pt_multiplications": 414960, "ct_ct_multiplications": 760, "explicit_rescale_requests": 6440, "chebyshev_evaluations": 440, "estimated_polynomial_multiplications": 9200, "bootstraps": 240, "bootstrap_iterations": 480},
+        {"rotations": 56700, "ct_pt_multiplications": 466830, "ct_ct_multiplications": 855, "explicit_rescale_requests": 7245, "chebyshev_evaluations": 495, "estimated_polynomial_multiplications": 10350, "bootstraps": 270, "bootstrap_iterations": 540},
+        {"rotations": 63000, "ct_pt_multiplications": 518700, "ct_ct_multiplications": 950, "explicit_rescale_requests": 8050, "chebyshev_evaluations": 550, "estimated_polynomial_multiplications": 11500, "bootstraps": 300, "bootstrap_iterations": 600},
+        {"rotations": 69300, "ct_pt_multiplications": 570570, "ct_ct_multiplications": 1045, "explicit_rescale_requests": 8855, "chebyshev_evaluations": 605, "estimated_polynomial_multiplications": 12650, "bootstraps": 330, "bootstrap_iterations": 660},
+        {"rotations": 75600, "ct_pt_multiplications": 622435, "ct_ct_multiplications": 1140, "explicit_rescale_requests": 9655, "chebyshev_evaluations": 660, "estimated_polynomial_multiplications": 13800, "bootstraps": 355, "bootstrap_iterations": 710}
+      ]
+    },
+    "range_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "softmax_shifted_logits",
+        "softmax_denominator",
+        "ln1_normalized_variance",
+        "gelu_input",
+        "ln2_normalized_variance"
+      ],
+      "properties": {
+        "softmax_shifted_logits": {"$ref": "#/$defs/interval"},
+        "softmax_denominator": {"$ref": "#/$defs/interval"},
+        "ln1_normalized_variance": {"$ref": "#/$defs/interval"},
+        "gelu_input": {"$ref": "#/$defs/interval"},
+        "ln2_normalized_variance": {"$ref": "#/$defs/interval"}
+      }
+    },
+    "inactive_polynomial_sentinel_ranges": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "softmax_denominator",
+        "ln1_normalized_variance",
+        "ln2_normalized_variance"
+      ],
+      "properties": {
+        "softmax_denominator": {"$ref": "#/$defs/interval"},
+        "ln1_normalized_variance": {"$ref": "#/$defs/interval"},
+        "ln2_normalized_variance": {"$ref": "#/$defs/interval"}
+      }
+    },
+    "layer_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layer_id",
+        "weights_layer_id",
+        "chain_input_source",
+        "input_metadata",
+        "raw_output_metadata",
+        "softmax_denominator_metadata",
+        "attention_output_metadata",
+        "ln1_variance_metadata",
+        "ln1_output_metadata",
+        "ffn_output_metadata",
+        "ln2_variance_metadata",
+        "input_quality",
+        "output_quality",
+        "exact_trace_diagnostic",
+        "inactive_max_abs",
+        "inactive_zero_checkpoint_count",
+        "inactive_sentinel_max_error",
+        "inactive_polynomial_sentinel_ranges",
+        "inactive_sentinel_range_status",
+        "encrypted_polynomial_input_ranges",
+        "handoff_refresh_performed",
+        "refresh_operation_counts",
+        "layer_operation_counts",
+        "cumulative_operation_counts",
+        "finite",
+        "range_status"
+      ],
+      "properties": {
+        "layer_id": {"type": "integer", "minimum": 0, "maximum": 11},
+        "weights_layer_id": {"type": "integer", "minimum": 0, "maximum": 11},
+        "chain_input_source": {
+          "enum": ["client_encrypted_trace_input", "previous_ciphertext_output_after_refresh"]
+        },
+        "input_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "raw_output_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "softmax_denominator_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "attention_output_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "ln1_variance_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "ln1_output_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "ffn_output_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "ln2_variance_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "input_quality": {"$ref": "#/$defs/quality"},
+        "output_quality": {"$ref": "#/$defs/quality"},
+        "exact_trace_diagnostic": {"$ref": "#/$defs/quality"},
+        "inactive_max_abs": {"type": "number", "minimum": 0, "maximum": 0.000001},
+        "inactive_zero_checkpoint_count": {"const": 28},
+        "inactive_sentinel_max_error": {"type": "number", "minimum": 0},
+        "inactive_polynomial_sentinel_ranges": {"$ref": "#/$defs/inactive_polynomial_sentinel_ranges"},
+        "inactive_sentinel_range_status": {"const": "passed"},
+        "encrypted_polynomial_input_ranges": {"$ref": "#/$defs/range_evidence"},
+        "handoff_refresh_performed": {"type": "boolean"},
+        "refresh_operation_counts": {"$ref": "#/$defs/refresh_operation_counts"},
+        "layer_operation_counts": {"$ref": "#/$defs/layer_operation_counts"},
+        "cumulative_operation_counts": {"$ref": "#/$defs/cumulative_operation_counts"},
+        "finite": {"const": true},
+        "range_status": {"const": "passed"}
+      }
+    },
+    "layer0_metric_regime": {
+      "type": "object",
+      "properties": {
+        "chain_input_source": {"const": "client_encrypted_trace_input"},
+        "input_metadata": {"$ref": "#/$defs/observed_layer0_input_metadata"},
+        "raw_output_metadata": {"$ref": "#/$defs/observed_raw_output_metadata"},
+        "softmax_denominator_metadata": {"$ref": "#/$defs/observed_polynomial_checkpoint_metadata"},
+        "attention_output_metadata": {"$ref": "#/$defs/observed_layer0_attention_output_metadata"},
+        "ln1_variance_metadata": {"$ref": "#/$defs/observed_polynomial_checkpoint_metadata"},
+        "ln1_output_metadata": {"$ref": "#/$defs/observed_layer0_ln1_output_metadata"},
+        "ffn_output_metadata": {"$ref": "#/$defs/observed_layer0_ffn_output_metadata"},
+        "ln2_variance_metadata": {"$ref": "#/$defs/observed_polynomial_checkpoint_metadata"}
+      }
+    },
+    "post_refresh_metric_regime": {
+      "type": "object",
+      "properties": {
+        "chain_input_source": {"const": "previous_ciphertext_output_after_refresh"},
+        "input_metadata": {"$ref": "#/$defs/observed_handoff_input_metadata"},
+        "raw_output_metadata": {"$ref": "#/$defs/observed_raw_output_metadata"},
+        "softmax_denominator_metadata": {"$ref": "#/$defs/observed_polynomial_checkpoint_metadata"},
+        "attention_output_metadata": {"$ref": "#/$defs/observed_post_refresh_attention_output_metadata"},
+        "ln1_variance_metadata": {"$ref": "#/$defs/observed_polynomial_checkpoint_metadata"},
+        "ln1_output_metadata": {"$ref": "#/$defs/observed_post_refresh_ln1_output_metadata"},
+        "ffn_output_metadata": {"$ref": "#/$defs/observed_post_refresh_ffn_output_metadata"},
+        "ln2_variance_metadata": {"$ref": "#/$defs/observed_polynomial_checkpoint_metadata"}
+      }
+    },
+    "layer_position_0": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 0},
+        "weights_layer_id": {"const": 0},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 6300, "ct_pt_multiplications": 51870, "ct_ct_multiplications": 95, "explicit_rescale_requests": 805, "chebyshev_evaluations": 55, "estimated_polynomial_multiplications": 1150, "bootstraps": 30, "bootstrap_iterations": 60}}
+      }
+    },
+    "layer_position_1": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 1},
+        "weights_layer_id": {"const": 1},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 12600, "ct_pt_multiplications": 103740, "ct_ct_multiplications": 190, "explicit_rescale_requests": 1610, "chebyshev_evaluations": 110, "estimated_polynomial_multiplications": 2300, "bootstraps": 60, "bootstrap_iterations": 120}}
+      }
+    },
+    "layer_position_2": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 2},
+        "weights_layer_id": {"const": 2},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 18900, "ct_pt_multiplications": 155610, "ct_ct_multiplications": 285, "explicit_rescale_requests": 2415, "chebyshev_evaluations": 165, "estimated_polynomial_multiplications": 3450, "bootstraps": 90, "bootstrap_iterations": 180}}
+      }
+    },
+    "layer_position_3": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 3},
+        "weights_layer_id": {"const": 3},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 25200, "ct_pt_multiplications": 207480, "ct_ct_multiplications": 380, "explicit_rescale_requests": 3220, "chebyshev_evaluations": 220, "estimated_polynomial_multiplications": 4600, "bootstraps": 120, "bootstrap_iterations": 240}}
+      }
+    },
+    "layer_position_4": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 4},
+        "weights_layer_id": {"const": 4},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 31500, "ct_pt_multiplications": 259350, "ct_ct_multiplications": 475, "explicit_rescale_requests": 4025, "chebyshev_evaluations": 275, "estimated_polynomial_multiplications": 5750, "bootstraps": 150, "bootstrap_iterations": 300}}
+      }
+    },
+    "layer_position_5": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 5},
+        "weights_layer_id": {"const": 5},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 37800, "ct_pt_multiplications": 311220, "ct_ct_multiplications": 570, "explicit_rescale_requests": 4830, "chebyshev_evaluations": 330, "estimated_polynomial_multiplications": 6900, "bootstraps": 180, "bootstrap_iterations": 360}}
+      }
+    },
+    "layer_position_6": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 6},
+        "weights_layer_id": {"const": 6},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 44100, "ct_pt_multiplications": 363090, "ct_ct_multiplications": 665, "explicit_rescale_requests": 5635, "chebyshev_evaluations": 385, "estimated_polynomial_multiplications": 8050, "bootstraps": 210, "bootstrap_iterations": 420}}
+      }
+    },
+    "layer_position_7": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 7},
+        "weights_layer_id": {"const": 7},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 50400, "ct_pt_multiplications": 414960, "ct_ct_multiplications": 760, "explicit_rescale_requests": 6440, "chebyshev_evaluations": 440, "estimated_polynomial_multiplications": 9200, "bootstraps": 240, "bootstrap_iterations": 480}}
+      }
+    },
+    "layer_position_8": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 8},
+        "weights_layer_id": {"const": 8},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 56700, "ct_pt_multiplications": 466830, "ct_ct_multiplications": 855, "explicit_rescale_requests": 7245, "chebyshev_evaluations": 495, "estimated_polynomial_multiplications": 10350, "bootstraps": 270, "bootstrap_iterations": 540}}
+      }
+    },
+    "layer_position_9": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 9},
+        "weights_layer_id": {"const": 9},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 63000, "ct_pt_multiplications": 518700, "ct_ct_multiplications": 950, "explicit_rescale_requests": 8050, "chebyshev_evaluations": 550, "estimated_polynomial_multiplications": 11500, "bootstraps": 300, "bootstrap_iterations": 600}}
+      }
+    },
+    "layer_position_10": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 10},
+        "weights_layer_id": {"const": 10},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 69300, "ct_pt_multiplications": 570570, "ct_ct_multiplications": 1045, "explicit_rescale_requests": 8855, "chebyshev_evaluations": 605, "estimated_polynomial_multiplications": 12650, "bootstraps": 330, "bootstrap_iterations": 660}}
+      }
+    },
+    "layer_position_11": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 11},
+        "weights_layer_id": {"const": 11},
+        "handoff_refresh_performed": {"const": false},
+        "refresh_operation_counts": {"$ref": "#/$defs/zero_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 75600, "ct_pt_multiplications": 622435, "ct_ct_multiplications": 1140, "explicit_rescale_requests": 9655, "chebyshev_evaluations": 660, "estimated_polynomial_multiplications": 13800, "bootstraps": 355, "bootstrap_iterations": 710}}
+      }
+    },
+    "phase_latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_load_oracle_ms",
+        "setup_keygen_ms",
+        "client_encrypt_ms",
+        "server_online_diagnostic_ms",
+        "client_checkpoint_validate_ms"
+      ],
+      "properties": {
+        "fixture_load_oracle_ms": {"type": "number", "minimum": 0},
+        "setup_keygen_ms": {"type": "number", "minimum": 0},
+        "client_encrypt_ms": {"type": "number", "minimum": 0},
+        "server_online_diagnostic_ms": {"type": "number", "minimum": 0.000000001},
+        "client_checkpoint_validate_ms": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}
