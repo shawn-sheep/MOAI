@@ -1,0 +1,1747 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.moai/openfhe-m5-artifact-schema-v6.json",
+  "title": "MOAI OpenFHE M5 evidence manifest v6",
+  "description": "Fail-closed schema for one non-benchmark correctness run of the server-only 12-layer OpenFHE CKKS encoder ciphertext chain. M5 schema v4 is a retired unpublished draft and is not accepted as formal evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "schema_binding",
+    "milestone",
+    "started_at",
+    "finished_at",
+    "git",
+    "commands",
+    "build_configuration",
+    "environment",
+    "profile",
+    "inputs",
+    "workload",
+    "contracts",
+    "metrics",
+    "gate",
+    "artifacts",
+    "claim_boundary",
+    "verdict"
+  ],
+  "properties": {
+    "schema_version": {"const": 6},
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:-]*$"
+    },
+    "milestone": {"const": "M5"},
+    "schema_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "validator", "runner", "retired_unpublished_drafts"],
+      "properties": {
+        "schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "path", "version", "sha256"],
+          "properties": {
+            "id": {"const": "https://local.moai/openfhe-m5-artifact-schema-v6.json"},
+            "path": {"const": "docs/openfhe-m5-artifact-schema-v6.json"},
+            "version": {"const": 6},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "validator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "path", "version", "sha256"],
+          "properties": {
+            "id": {"const": "moai.openfhe.m5.artifact-validator.v6"},
+            "path": {"const": "scripts/validate_openfhe_m5_artifact_v6.py"},
+            "version": {"const": 6},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "runner": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "path", "version", "sha256"],
+          "properties": {
+            "id": {"const": "moai.openfhe.m5.artifact-runner.v6"},
+            "path": {"const": "scripts/run_openfhe_encoder12_artifact_v6.py"},
+            "version": {"const": 6},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "retired_unpublished_drafts": {
+          "const": ["https://local.moai/openfhe-m5-artifact-schema-v4.json"]
+        }
+      }
+    },
+    "started_at": {"$ref": "#/$defs/timestamp"},
+    "finished_at": {"$ref": "#/$defs/timestamp"},
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_root",
+        "branch",
+        "local_commit",
+        "clean",
+        "tracking_ref",
+        "tracking_commit",
+        "remote_name",
+        "remote_url",
+        "remote_ref",
+        "remote_commit"
+      ],
+      "properties": {
+        "repository_root": {"type": "string", "pattern": "^/"},
+        "branch": {"const": "refactor/openfhe-cpu"},
+        "local_commit": {"$ref": "#/$defs/git_sha"},
+        "clean": {"const": true},
+        "tracking_ref": {"const": "refs/remotes/origin/refactor/openfhe-cpu"},
+        "tracking_commit": {"$ref": "#/$defs/git_sha"},
+        "remote_name": {"const": "origin"},
+        "remote_url": {"const": "https://github.com/shawn-sheep/MOAI.git"},
+        "remote_ref": {"const": "refs/heads/refactor/openfhe-cpu"},
+        "remote_commit": {"$ref": "#/$defs/git_sha"}
+      }
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "prefixItems": [
+        {"$ref": "#/$defs/command"},
+        {"$ref": "#/$defs/command"},
+        {"$ref": "#/$defs/command"},
+        {"$ref": "#/$defs/command"},
+        {"$ref": "#/$defs/command"},
+        {"$ref": "#/$defs/command"},
+        {
+          "allOf": [
+            {"$ref": "#/$defs/command"},
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "/usr/bin/env --unset=CC --unset=CXX --unset=CFLAGS --unset=CXXFLAGS --unset=CPPFLAGS --unset=LDFLAGS --unset=LD_PRELOAD --unset=LD_LIBRARY_PATH --unset=CMAKE_PREFIX_PATH --unset=CMAKE_TOOLCHAIN_FILE --unset=CPATH --unset=CPLUS_INCLUDE_PATH --unset=C_INCLUDE_PATH --unset=OBJC_INCLUDE_PATH --unset=LIBRARY_PATH --unset=LD_AUDIT --unset=LD_DEBUG --unset=GCC_EXEC_PREFIX --unset=COMPILER_PATH --unset=MAKEFLAGS --unset=MFLAGS --unset=BASH_ENV --unset=ENV --unset=PYTHONHOME --unset=PYTHONPATH --unset=CMAKE_GENERATOR --unset=CMAKE_GENERATOR_PLATFORM --unset=CMAKE_GENERATOR_TOOLSET --unset=CMAKE_GENERATOR_INSTANCE --unset=CMAKE_BUILD_PARALLEL_LEVEL --unset=CTEST_PARALLEL_LEVEL --unset=CTEST_TEST_LOAD --unset=CTEST_RESOURCE_SPEC_FILE /usr/bin/cmake --fresh -S /home/shawnsheep/MOAI -B /home/shawnsheep/MOAI/build-openfhe -G 'Unix Makefiles' -DOpenFHE_DIR:PATH=/home/shawnsheep/opt/openfhe_v1_5_1/lib/OpenFHE -DCMAKE_BUILD_TYPE:STRING=Release -DBUILD_TESTING:BOOL=ON -DCMAKE_CXX_COMPILER:FILEPATH=/usr/bin/c++ -DCMAKE_MAKE_PROGRAM:FILEPATH=/usr/bin/gmake -DCMAKE_CXX_FLAGS:STRING= '-DCMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG' -DCMAKE_EXE_LINKER_FLAGS:STRING= -DCMAKE_EXE_LINKER_FLAGS_RELEASE:STRING= -DCMAKE_SHARED_LINKER_FLAGS:STRING= -DCMAKE_MODULE_LINKER_FLAGS:STRING= -DCMAKE_STATIC_LINKER_FLAGS:STRING="
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/command"},
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "/usr/bin/cmake --build /home/shawnsheep/MOAI/build-openfhe --clean-first -j 4"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/command"},
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "/usr/bin/ldd /home/shawnsheep/MOAI/build-openfhe/openfhe_encoder_12_layer_smoke"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            {"$ref": "#/$defs/command"},
+            {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "const": "/usr/bin/ctest --test-dir /home/shawnsheep/MOAI/build-openfhe --output-on-failure --verbose --no-tests=error -R '^(moai_trace_contract|openfhe_(server_trust_boundary|server_trust_boundary_negative|profile_contract|profile_validator_contract|artifact_schema_contract|artifact_validator_contract|encoder_artifact_runner_contract|m4_v5_artifact_schema_contract|m4_v5_artifact_validator_contract|m4_v5_encoder_artifact_runner_contract|m5_artifact_schema_contract|m5_artifact_validator_contract|encoder12_artifact_runner_contract|m5_v6_artifact_schema_contract|m5_v6_artifact_validator_contract|m5_v6_encoder12_artifact_runner_contract|evaluation_key_bundle_smoke|feature_packed_smoke|feature_packed_attention_smoke|feature_bootstrap_smoke|feature_layernorm_smoke|encoder_fixture_contract|encoder_plaintext_oracle_smoke|encoder_layer_smoke|encoder_12_layer_preflight|encoder_12_layer_crypto_preflight|encoder_trace_contract|encoder_trace_validator_contract))$'"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "items": {"$ref": "#/$defs/command"}
+    },
+    "build_configuration": {
+      "$ref": "#/$defs/build_configuration"
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture",
+        "compiler",
+        "cmake",
+        "python",
+        "openfhe_version",
+        "openfhe_prefix",
+        "wsl"
+      ],
+      "properties": {
+        "os": {"type": "string", "minLength": 1},
+        "architecture": {"type": "string", "minLength": 1},
+        "compiler": {"type": "string", "minLength": 1},
+        "cmake": {"type": "string", "minLength": 1},
+        "python": {"type": "string", "minLength": 1},
+        "openfhe_version": {"const": "1.5.1"},
+        "openfhe_prefix": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1"},
+        "wsl": {"const": true}
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "security_claim",
+        "warning",
+        "source_config_path",
+        "source_config_sha256",
+        "source_config_bytes",
+        "effective_profile_locator",
+        "canonicalization",
+        "effective_profile_payload",
+        "effective_profile_sha256"
+      ],
+      "properties": {
+        "id": {"const": "paper_compat"},
+        "security_claim": {"const": "none"},
+        "warning": {
+          "const": "Research reproduction parameters only. Do not claim 128-bit security."
+        },
+        "source_config_path": {"const": "config/paper_compat_feature_packed.json"},
+        "source_config_sha256": {"$ref": "#/$defs/sha256"},
+        "source_config_bytes": {"type": "integer", "minimum": 1},
+        "effective_profile_locator": {"const": "/effective_profile"},
+        "canonicalization": {"const": "MOAI-json-sort-keys-compact-utf8-v1"},
+        "effective_profile_payload": {"type": "object", "minProperties": 1},
+        "effective_profile_sha256": {
+          "const": "94f30e628e21f02146ce7ed9820194eabba3820f6e1e17176a31f8c5acf8b0be"
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 448,
+      "maxItems": 448,
+      "items": {"$ref": "#/$defs/input_file"}
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "backend",
+        "executable_path",
+        "executable_sha256",
+        "executable_bytes",
+        "repeat_count",
+        "warmup_count",
+        "timing_claim",
+        "latency_kind"
+      ],
+      "properties": {
+        "scope": {
+          "const": "M5 server-only five-token BERT-base 12-layer encoder ciphertext-chain trace replay"
+        },
+        "backend": {"const": "OpenFHE CKKS CPU"},
+        "executable_path": {"const": "build-openfhe/openfhe_encoder_12_layer_smoke"},
+        "executable_sha256": {"$ref": "#/$defs/sha256"},
+        "executable_bytes": {"type": "integer", "minimum": 1},
+        "repeat_count": {"const": 1},
+        "warmup_count": {"const": 0},
+        "timing_claim": {"const": false},
+        "latency_kind": {"const": "non_benchmark_diagnostic"}
+      }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approximation_config_path",
+        "approximation_config_sha256",
+        "channel_scales_config_path",
+        "channel_scales_config_sha256",
+        "encoder_trace_contract_path",
+        "encoder_trace_contract_sha256",
+        "profile_config_path",
+        "profile_config_sha256",
+        "execution",
+        "crypto_preflight",
+        "schedule_preflight",
+        "feature_packed_trace_scale_contract",
+        "exact3_evidence",
+        "metadata_schedule",
+        "thresholds",
+        "polynomial_intervals",
+        "layer_input_identities"
+      ],
+      "properties": {
+        "approximation_config_path": {"const": "config/openfhe_approximations.json"},
+        "approximation_config_sha256": {"$ref": "#/$defs/sha256"},
+        "channel_scales_config_path": {"const": "config/moai_trace_channel_scales.json"},
+        "channel_scales_config_sha256": {"$ref": "#/$defs/sha256"},
+        "encoder_trace_contract_path": {"const": "config/moai_encoder_trace.json"},
+        "encoder_trace_contract_sha256": {"$ref": "#/$defs/sha256"},
+        "profile_config_path": {"const": "config/paper_compat_feature_packed.json"},
+        "profile_config_sha256": {"$ref": "#/$defs/sha256"},
+        "execution": {"$ref": "#/$defs/execution_contract"},
+        "crypto_preflight": {"$ref": "#/$defs/crypto_preflight"},
+        "schedule_preflight": {"$ref": "#/$defs/schedule_preflight"},
+        "feature_packed_trace_scale_contract": {
+          "$ref": "#/$defs/feature_packed_trace_scale_contract"
+        },
+        "exact3_evidence": {"$ref": "#/$defs/exact3_evidence"},
+        "metadata_schedule": {"$ref": "#/$defs/metadata_schedule"},
+        "thresholds": {"$ref": "#/$defs/thresholds"},
+        "polynomial_intervals": {"$ref": "#/$defs/polynomial_intervals"},
+        "layer_input_identities": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "items": {"$ref": "#/$defs/layer_input_identity"}
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repeat_count",
+        "successful_repeats",
+        "warmup_count",
+        "timing_claim",
+        "latency_kind",
+        "elapsed_seconds",
+        "peak_rss_kib",
+        "checkpoint_metadata_sha256",
+        "phase_latency_ms",
+        "layers",
+        "final_quality",
+        "final_metadata",
+        "operation_counts",
+        "finite"
+      ],
+      "properties": {
+        "repeat_count": {"const": 1},
+        "successful_repeats": {"const": 1},
+        "warmup_count": {"const": 0},
+        "timing_claim": {"const": false},
+        "latency_kind": {"const": "non_benchmark_diagnostic"},
+        "elapsed_seconds": {"type": "number", "minimum": 0.000000001},
+        "peak_rss_kib": {"type": "integer", "minimum": 1},
+        "checkpoint_metadata_sha256": {"$ref": "#/$defs/sha256"},
+        "phase_latency_ms": {"$ref": "#/$defs/phase_latency"},
+        "layers": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "prefixItems": [
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/layer0_metric_regime"}, {"$ref": "#/$defs/layer_position_0"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_1"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_2"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_3"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_4"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_5"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_6"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_7"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_8"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_9"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_10"}]},
+            {"allOf": [{"$ref": "#/$defs/layer_metric"}, {"$ref": "#/$defs/post_refresh_metric_regime"}, {"$ref": "#/$defs/layer_position_11"}]}
+          ]
+        },
+        "final_quality": {"$ref": "#/$defs/final_quality"},
+        "final_metadata": {
+          "allOf": [
+            {"$ref": "#/$defs/tensor_metadata"},
+            {"$ref": "#/$defs/observed_raw_output_metadata"}
+          ]
+        },
+        "operation_counts": {"$ref": "#/$defs/total_operation_counts"},
+        "finite": {"const": true}
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "decision", "checks"],
+      "properties": {
+        "passed": {"const": true},
+        "decision": {"const": "PASS_M5_RUNNABLE_PROTOTYPE"},
+        "checks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "build",
+            "trust_boundary",
+            "input_integrity",
+            "ciphertext_chain",
+            "approximation_ranges",
+            "correctness",
+            "artifact_integrity",
+            "remote_sha"
+          ],
+          "properties": {
+            "build": {"const": "PASS"},
+            "trust_boundary": {"const": "PASS"},
+            "input_integrity": {"const": "PASS"},
+            "ciphertext_chain": {"const": "PASS"},
+            "approximation_ranges": {"const": "PASS"},
+            "correctness": {"const": "PASS"},
+            "artifact_integrity": {"const": "PASS"},
+            "remote_sha": {"const": "PASS"}
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {"$ref": "#/$defs/artifact_file"}
+    },
+    "claim_boundary": {
+      "type": "array",
+      "const": [
+        "Five-token M5 12-layer encoder trace replay only; not task-level inference.",
+        "server-only is an API/target trust boundary, not operating-system process isolation; correctness executable links client observer for checkpoints",
+        "paper_compat OpenFHE CKKS CPU parameters with security_claim=none.",
+        "M5 correctness is prototype-only with inactive/cross-lane <=1e-3; legacy MOAI defined no such threshold and strict numerical parity is not claimed.",
+        "Timing is a non-benchmark diagnostic; no speedup claim.",
+        "GPU, Discrete CKKS/FBT, QDQ, tokenizer, and classifier are excluded."
+      ]
+    },
+    "verdict": {"const": "GO_PROTOTYPE"}
+  },
+  "$defs": {
+    "provenance_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "openfhe_linked_library": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["soname", "path", "bytes", "sha256"],
+      "properties": {
+        "soname": {
+          "enum": [
+            "libOPENFHEbinfhe.so.1",
+            "libOPENFHEcore.so.1",
+            "libOPENFHEpke.so.1"
+          ]
+        },
+        "path": {
+          "pattern": "^/home/shawnsheep/opt/openfhe_v1_5_1/lib/libOPENFHE(binfhe|core|pke)\\.so\\.1\\.5\\.1$"
+        },
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "build_configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generator",
+        "source_root",
+        "build_root",
+        "openfhe_dir",
+        "build_type",
+        "build_testing",
+        "cxx_compiler",
+        "make_program",
+        "cxx_flags",
+        "cxx_flags_release",
+        "exe_linker_flags",
+        "exe_linker_flags_release",
+        "shared_linker_flags",
+        "module_linker_flags",
+        "static_linker_flags",
+        "environment_inheritance",
+        "cleared_environment_variables",
+        "forced_environment_variables",
+        "cmake_cache",
+        "openfhe_cmake_package_files",
+        "openfhe_include_tree",
+        "openfhe_linked_libraries"
+      ],
+      "properties": {
+        "generator": {"const": "Unix Makefiles"},
+        "source_root": {"const": "/home/shawnsheep/MOAI"},
+        "build_root": {"const": "/home/shawnsheep/MOAI/build-openfhe"},
+        "openfhe_dir": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1/lib/OpenFHE"},
+        "build_type": {"const": "Release"},
+        "build_testing": {"const": true},
+        "cxx_compiler": {"const": "/usr/bin/c++"},
+        "make_program": {"const": "/usr/bin/gmake"},
+        "cxx_flags": {"const": ""},
+        "cxx_flags_release": {"const": "-O3 -DNDEBUG"},
+        "exe_linker_flags": {"const": ""},
+        "exe_linker_flags_release": {"const": ""},
+        "shared_linker_flags": {"const": ""},
+        "module_linker_flags": {"const": ""},
+        "static_linker_flags": {"const": ""},
+        "environment_inheritance": {"const": "ambient_minus_cleared_variables"},
+        "cleared_environment_variables": {
+          "const": [
+            "CC",
+            "CXX",
+            "CFLAGS",
+            "CXXFLAGS",
+            "CPPFLAGS",
+            "LDFLAGS",
+            "LD_PRELOAD",
+            "LD_LIBRARY_PATH",
+            "CMAKE_PREFIX_PATH",
+            "CMAKE_TOOLCHAIN_FILE",
+            "CPATH",
+            "CPLUS_INCLUDE_PATH",
+            "C_INCLUDE_PATH",
+            "OBJC_INCLUDE_PATH",
+            "LIBRARY_PATH",
+            "LD_AUDIT",
+            "LD_DEBUG",
+            "GCC_EXEC_PREFIX",
+            "COMPILER_PATH",
+            "MAKEFLAGS",
+            "MFLAGS",
+            "BASH_ENV",
+            "ENV",
+            "PYTHONHOME",
+            "PYTHONPATH",
+            "CMAKE_GENERATOR",
+            "CMAKE_GENERATOR_PLATFORM",
+            "CMAKE_GENERATOR_TOOLSET",
+            "CMAKE_GENERATOR_INSTANCE",
+            "CMAKE_BUILD_PARALLEL_LEVEL",
+            "CTEST_PARALLEL_LEVEL",
+            "CTEST_TEST_LOAD",
+            "CTEST_RESOURCE_SPEC_FILE"
+          ]
+        },
+        "forced_environment_variables": {
+          "const": {"LANG": "C", "LC_ALL": "C"}
+        },
+        "cmake_cache": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "bytes", "sha256"],
+          "properties": {
+            "path": {"const": "build-openfhe/CMakeCache.txt"},
+            "bytes": {"type": "integer", "minimum": 1},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "openfhe_cmake_package_files": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [
+            {
+              "allOf": [
+                {"$ref": "#/$defs/provenance_file"},
+                {"properties": {"path": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1/lib/OpenFHE/OpenFHEConfig.cmake"}}}
+              ]
+            },
+            {
+              "allOf": [
+                {"$ref": "#/$defs/provenance_file"},
+                {"properties": {"path": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1/lib/OpenFHE/OpenFHEConfigVersion.cmake"}}}
+              ]
+            },
+            {
+              "allOf": [
+                {"$ref": "#/$defs/provenance_file"},
+                {"properties": {"path": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1/lib/OpenFHE/OpenFHETargets.cmake"}}}
+              ]
+            },
+            {
+              "allOf": [
+                {"$ref": "#/$defs/provenance_file"},
+                {"properties": {"path": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1/lib/OpenFHE/OpenFHETargets-release.cmake"}}}
+              ]
+            }
+          ],
+          "items": {"$ref": "#/$defs/provenance_file"}
+        },
+        "openfhe_include_tree": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "root",
+            "file_count",
+            "bytes",
+            "algorithm",
+            "canonicalization",
+            "sha256"
+          ],
+          "properties": {
+            "root": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1/include/openfhe"},
+            "file_count": {"type": "integer", "minimum": 1},
+            "bytes": {"type": "integer", "minimum": 1},
+            "algorithm": {"const": "SHA-256"},
+            "canonicalization": {"const": "relative-posix-path-nul-size-nul-sha256-newline-v1"},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "openfhe_linked_libraries": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/openfhe_linked_library"}
+        }
+      }
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "git_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "repository_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "cwd", "exit_code", "phase"],
+      "properties": {
+        "command": {"type": "string", "minLength": 1},
+        "cwd": {"type": "string", "pattern": "^/"},
+        "exit_code": {"const": 0},
+        "phase": {"const": "artifact_generation"},
+        "started_at": {"$ref": "#/$defs/timestamp"},
+        "finished_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "input_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "media_type", "role"],
+      "properties": {
+        "path": {"$ref": "#/$defs/repository_path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "media_type": {"enum": ["application/json", "text/csv"]},
+        "role": {"enum": ["configuration", "weights", "trace"]}
+      }
+    },
+    "artifact_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes", "media_type", "role"],
+      "properties": {
+        "path": {"$ref": "#/$defs/repository_path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "media_type": {"enum": ["text/plain", "text/csv"]},
+        "role": {"enum": ["stdout", "metrics", "checksum"]}
+      }
+    },
+    "execution_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "encoder_layers",
+        "layer_ids",
+        "trace_shape",
+        "feature_block_size",
+        "chain_mode",
+        "client_encrypt_calls",
+        "encrypted_input_ciphertexts",
+        "plaintext_activation_resets",
+        "server_layer_evaluations",
+        "inter_layer_refreshes",
+        "checkpoint_decryption_owner",
+        "final_decryption_owner",
+        "server_private_key_present",
+        "server_decryptions",
+        "server_plaintext_activations",
+        "approximation_range_status",
+        "quality_reference"
+      ],
+      "properties": {
+        "mode": {"const": "server-only"},
+        "encoder_layers": {"const": 12},
+        "layer_ids": {"$ref": "#/$defs/layer_ids"},
+        "trace_shape": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer"}},
+        "feature_block_size": {"const": 1024},
+        "chain_mode": {"const": "ciphertext_output_to_next_input"},
+        "client_encrypt_calls": {"const": 1},
+        "encrypted_input_ciphertexts": {"const": 5},
+        "plaintext_activation_resets": {"const": 0},
+        "server_layer_evaluations": {"const": 12},
+        "inter_layer_refreshes": {"const": 11},
+        "checkpoint_decryption_owner": {"const": "client"},
+        "final_decryption_owner": {"const": "client"},
+        "server_private_key_present": {"const": false},
+        "server_decryptions": {"const": 0},
+        "server_plaintext_activations": {"const": false},
+        "approximation_range_status": {"const": "all_client_validated"},
+        "quality_reference": {
+          "const": "12-layer chained frozen polynomial oracle from config/moai_encoder_trace.json"
+        }
+      }
+    },
+    "schedule_preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "test",
+        "profile",
+        "security_claim",
+        "encoder_layers",
+        "layer_ids",
+        "chain_mode",
+        "expected_fixture_files",
+        "metadata_schedule_preflight",
+        "formal_metadata_schedule_source",
+        "formal_schedule_sealed",
+        "he_metadata_verified_by_preflight",
+        "trace_hash_gate",
+        "finite_and_in_range",
+        "final_relative_l2",
+        "final_cosine",
+        "final_max_absolute",
+        "load_and_oracle_ms"
+      ],
+      "properties": {
+        "test": {"const": "openfhe_encoder_12_layer_preflight"},
+        "profile": {"const": "paper_compat"},
+        "security_claim": {"const": "none"},
+        "encoder_layers": {"const": 12},
+        "layer_ids": {"$ref": "#/$defs/layer_ids"},
+        "chain_mode": {"const": "plaintext_output_to_next_oracle_input"},
+        "expected_fixture_files": {"const": 444},
+        "metadata_schedule_preflight": {
+          "const": "synthetic_structure_only"
+        },
+        "formal_metadata_schedule_source": {
+          "const": "two_layer_live_candidate_requires_exact_three"
+        },
+        "formal_schedule_sealed": {"const": false},
+        "he_metadata_verified_by_preflight": {"const": false},
+        "trace_hash_gate": {"const": "separate_fail_closed_validator_required"},
+        "finite_and_in_range": {"const": true},
+        "final_relative_l2": {"type": "number", "minimum": 0, "maximum": 0.05},
+        "final_cosine": {
+          "type": "number",
+          "minimum": 0.99,
+          "maximum": 1.000000000001
+        },
+        "final_max_absolute": {"type": "number", "minimum": 0},
+        "load_and_oracle_ms": {"type": "number", "minimum": 0}
+      }
+    },
+    "crypto_preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "test",
+        "profile",
+        "security_claim",
+        "input_metadata",
+        "server_private_key_present",
+        "server_decryptions",
+        "server_plaintext_activations",
+        "additive_he_operations",
+        "passed"
+      ],
+      "properties": {
+        "test": {"const": "openfhe_encoder_12_layer_crypto_preflight"},
+        "profile": {"const": "paper_compat"},
+        "security_claim": {"const": "none"},
+        "input_metadata": {
+          "allOf": [
+            {"$ref": "#/$defs/tensor_metadata"},
+            {"$ref": "#/$defs/observed_layer0_input_metadata"}
+          ]
+        },
+        "server_private_key_present": {"const": false},
+        "server_decryptions": {"const": 0},
+        "server_plaintext_activations": {"const": false},
+        "additive_he_operations": {"const": 0},
+        "passed": {"const": true}
+      }
+    },
+    "layer_ids": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": {"type": "integer", "minimum": 0, "maximum": 11}
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "per_layer_relative_l2_max",
+        "per_layer_cosine_min",
+        "final_relative_l2_max",
+        "final_cosine_min",
+        "inactive_max_abs",
+        "inactive_sentinel_in_interval_required",
+        "finite_required"
+      ],
+      "properties": {
+        "per_layer_relative_l2_max": {"const": 0.05},
+        "per_layer_cosine_min": {"const": 0.99},
+        "final_relative_l2_max": {"const": 0.05},
+        "final_cosine_min": {"const": 0.99},
+        "inactive_max_abs": {"const": 0.001},
+        "inactive_sentinel_in_interval_required": {"const": true},
+        "finite_required": {"const": true}
+      }
+    },
+    "interval": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {"type": "number"}
+    },
+    "polynomial_intervals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "softmax_shifted_logits",
+        "softmax_denominator",
+        "ln1_normalized_variance",
+        "gelu_input",
+        "ln2_normalized_variance"
+      ],
+      "properties": {
+        "softmax_shifted_logits": {"$ref": "#/$defs/interval"},
+        "softmax_denominator": {"$ref": "#/$defs/interval"},
+        "ln1_normalized_variance": {"$ref": "#/$defs/interval"},
+        "gelu_input": {"$ref": "#/$defs/interval"},
+        "ln2_normalized_variance": {"$ref": "#/$defs/interval"}
+      }
+    },
+    "layer_input_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layer_id",
+        "weight_file_count",
+        "trace_file_count",
+        "weight_bundle_sha256",
+        "trace_bundle_sha256"
+      ],
+      "properties": {
+        "layer_id": {"type": "integer", "minimum": 0, "maximum": 11},
+        "weight_file_count": {"const": 16},
+        "trace_file_count": {"const": 21},
+        "weight_bundle_sha256": {"$ref": "#/$defs/sha256"},
+        "trace_bundle_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_l2", "cosine", "max_absolute"],
+      "properties": {
+        "relative_l2": {"type": "number", "minimum": 0, "maximum": 0.05},
+        "cosine": {"type": "number", "minimum": 0.99, "maximum": 1.000000000001},
+        "max_absolute": {"type": "number", "minimum": 0}
+      }
+    },
+    "final_quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_l2", "cosine", "max_absolute", "inactive_max_abs", "inactive_sentinel_max_error", "inactive_sentinel_range_status"],
+      "properties": {
+        "relative_l2": {"type": "number", "minimum": 0, "maximum": 0.05},
+        "cosine": {"type": "number", "minimum": 0.99, "maximum": 1.000000000001},
+        "max_absolute": {"type": "number", "minimum": 0},
+        "inactive_max_abs": {"type": "number", "minimum": 0, "maximum": 0.001},
+        "inactive_sentinel_max_error": {"type": "number", "minimum": 0},
+        "inactive_sentinel_range_status": {"const": "all_client_validated"}
+      }
+    },
+    "tensor_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "noise_scale_degree", "remaining_levels", "scale_bits", "expected_scale_bits", "ciphertext_count"],
+      "properties": {
+        "level": {"type": "integer", "minimum": 0},
+        "noise_scale_degree": {"type": "integer", "minimum": 1},
+        "remaining_levels": {"type": "integer", "minimum": 1},
+        "scale_bits": {"type": "number", "minimum": 49.999, "maximum": 100.001},
+        "expected_scale_bits": {"enum": [50, 100]},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "layer0_input_metadata": {
+      "const": {
+        "level": 29,
+        "noise_scale_degree": 1,
+        "remaining_levels": 18,
+        "scale_bits": 50,
+        "expected_scale_bits": 50,
+        "ciphertext_count": 5
+      }
+    },
+    "handoff_input_metadata": {
+      "const": {
+        "level": 19,
+        "noise_scale_degree": 2,
+        "remaining_levels": 27,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "softmax_checkpoint_metadata": {
+      "const": {
+        "level": 18,
+        "noise_scale_degree": 2,
+        "remaining_levels": 28,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "layernorm_checkpoint_metadata": {
+      "const": {
+        "level": 19,
+        "noise_scale_degree": 2,
+        "remaining_levels": 27,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "raw_output_metadata": {
+      "const": {
+        "level": 30,
+        "noise_scale_degree": 2,
+        "remaining_levels": 16,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "layer0_attention_output_metadata": {
+      "const": {
+        "level": 40,
+        "noise_scale_degree": 2,
+        "remaining_levels": 6,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "post_refresh_attention_output_metadata": {
+      "const": {
+        "level": 31,
+        "noise_scale_degree": 2,
+        "remaining_levels": 15,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "layer0_ln1_output_metadata": {
+      "const": {
+        "level": 32,
+        "noise_scale_degree": 2,
+        "remaining_levels": 14,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "post_refresh_ln1_output_metadata": {
+      "const": {
+        "level": 30,
+        "noise_scale_degree": 2,
+        "remaining_levels": 16,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "layer0_ffn_output_metadata": {
+      "const": {
+        "level": 45,
+        "noise_scale_degree": 2,
+        "remaining_levels": 1,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "post_refresh_ffn_output_metadata": {
+      "const": {
+        "level": 43,
+        "noise_scale_degree": 2,
+        "remaining_levels": 3,
+        "scale_bits": 100,
+        "expected_scale_bits": 100,
+        "ciphertext_count": 5
+      }
+    },
+    "observed_layer0_input_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 29},
+        "noise_scale_degree": {"const": 1},
+        "remaining_levels": {"const": 18},
+        "scale_bits": {"type": "number", "minimum": 49.999, "maximum": 50.001},
+        "expected_scale_bits": {"const": 50},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_handoff_input_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 19},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 27},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_softmax_checkpoint_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 18},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 28},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_layernorm_checkpoint_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 19},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 27},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_raw_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 30},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 16},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_layer0_attention_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 40},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 6},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_post_refresh_attention_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 31},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 15},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_layer0_ln1_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 32},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 14},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_post_refresh_ln1_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 30},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 16},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_layer0_ffn_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 45},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 1},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "observed_post_refresh_ffn_output_metadata": {
+      "type": "object",
+      "properties": {
+        "level": {"const": 43},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 3},
+        "scale_bits": {"type": "number", "minimum": 99.999, "maximum": 100.001},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "feature_packed_trace_scale_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_path",
+        "json_locator",
+        "contract_id",
+        "contract_sha256",
+        "values_sha256",
+        "raw_variance_sha256"
+      ],
+      "properties": {
+        "source_path": {"const": "config/openfhe_approximations.json"},
+        "json_locator": {
+          "const": "operators.layernorm.feature_packed_trace_scale_contract"
+        },
+        "contract_id": {"const": "layernorm_layer_token_power2_scale_v1"},
+        "contract_sha256": {
+          "allOf": [
+            {"$ref": "#/$defs/sha256"},
+            {"const": "b493b032e461e15d7436efe7fff5948436afa8e302646daa97db78fa1d59be3e"}
+          ]
+        },
+        "values_sha256": {
+          "allOf": [
+            {"$ref": "#/$defs/sha256"},
+            {"const": "9436f05ce80b427de47700d924869b0dd6f13cc515e586446fcd2dc56faec28a"}
+          ]
+        },
+        "raw_variance_sha256": {
+          "allOf": [
+            {"$ref": "#/$defs/sha256"},
+            {"const": "940f92de81915c2121b427b72827e4ed87d072fda0847266d0cb5521d60f93b6"}
+          ]
+        }
+      }
+    },
+    "exact3_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "relative_path",
+        "manifest_sha256",
+        "sha256sums_sha256",
+        "layer_count",
+        "artifact_eligible",
+        "exact3_gate_passed",
+        "schedule_evidence_eligible",
+        "formal_schedule_sealed"
+      ],
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:-]*$"
+        },
+        "relative_path": {
+          "type": "string",
+          "minLength": 17,
+          "maxLength": 144,
+          "pattern": "^results/openfhe/[A-Za-z0-9][A-Za-z0-9._+:-]{0,127}$"
+        },
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "layer_count": {"const": 3},
+        "artifact_eligible": {"const": false},
+        "exact3_gate_passed": {"const": true},
+        "schedule_evidence_eligible": {"const": true},
+        "formal_schedule_sealed": {"const": true}
+      }
+    },
+    "metadata_schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "multiplicative_depth",
+        "used_level_formula",
+        "remaining_levels_formula",
+        "initial_layer_input",
+        "post_refresh_layer_input",
+        "post_bootstrap_softmax_denominator_checkpoint",
+        "post_bootstrap_canonicalized_layernorm_variance_checkpoint",
+        "raw_layer_output",
+        "attention_output_by_layer_regime",
+        "ln1_output_by_layer_regime",
+        "ffn_output_by_layer_regime",
+        "relative_used_level_deltas",
+        "checkpoint_metadata_digest"
+      ],
+      "properties": {
+        "multiplicative_depth": {"const": 47},
+        "used_level_formula": {"const": "level + noise_scale_degree - 1"},
+        "remaining_levels_formula": {"const": "multiplicative_depth - used_level"},
+        "initial_layer_input": {"$ref": "#/$defs/layer0_input_metadata"},
+        "post_refresh_layer_input": {"$ref": "#/$defs/handoff_input_metadata"},
+        "post_bootstrap_softmax_denominator_checkpoint": {"$ref": "#/$defs/softmax_checkpoint_metadata"},
+        "post_bootstrap_canonicalized_layernorm_variance_checkpoint": {"$ref": "#/$defs/layernorm_checkpoint_metadata"},
+        "raw_layer_output": {"$ref": "#/$defs/raw_output_metadata"},
+        "attention_output_by_layer_regime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layer_0", "layers_1_to_11"],
+          "properties": {
+            "layer_0": {"$ref": "#/$defs/layer0_attention_output_metadata"},
+            "layers_1_to_11": {"$ref": "#/$defs/post_refresh_attention_output_metadata"}
+          }
+        },
+        "ln1_output_by_layer_regime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layer_0", "layers_1_to_11"],
+          "properties": {
+            "layer_0": {"$ref": "#/$defs/layer0_ln1_output_metadata"},
+            "layers_1_to_11": {"$ref": "#/$defs/post_refresh_ln1_output_metadata"}
+          }
+        },
+        "ffn_output_by_layer_regime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["layer_0", "layers_1_to_11"],
+          "properties": {
+            "layer_0": {"$ref": "#/$defs/layer0_ffn_output_metadata"},
+            "layers_1_to_11": {"$ref": "#/$defs/post_refresh_ffn_output_metadata"}
+          }
+        },
+        "relative_used_level_deltas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "input_to_softmax_checkpoint_net_recovered",
+            "softmax_checkpoint_to_attention_output_consumed",
+            "attention_output_to_ln1_checkpoint_net_recovered",
+            "ln1_checkpoint_to_ln1_output_consumed",
+            "ln1_output_to_ffn_output_consumed",
+            "ffn_output_to_ln2_checkpoint_net_recovered",
+            "ln2_checkpoint_to_raw_output_consumed",
+            "previous_raw_output_to_input_recovered"
+          ],
+          "properties": {
+            "input_to_softmax_checkpoint_net_recovered": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["layer_0", "layers_1_to_11"],
+              "properties": {
+                "layer_0": {"const": 10},
+                "layers_1_to_11": {"const": 1}
+              }
+            },
+            "softmax_checkpoint_to_attention_output_consumed": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["layer_0", "layers_1_to_11"],
+              "properties": {
+                "layer_0": {"const": 22},
+                "layers_1_to_11": {"const": 13}
+              }
+            },
+            "attention_output_to_ln1_checkpoint_net_recovered": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["layer_0", "layers_1_to_11"],
+              "properties": {
+                "layer_0": {"const": 21},
+                "layers_1_to_11": {"const": 12}
+              }
+            },
+            "ln1_checkpoint_to_ln1_output_consumed": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["layer_0", "layers_1_to_11"],
+              "properties": {
+                "layer_0": {"const": 13},
+                "layers_1_to_11": {"const": 11}
+              }
+            },
+            "ln1_output_to_ffn_output_consumed": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["layer_0", "layers_1_to_11"],
+              "properties": {
+                "layer_0": {"const": 13},
+                "layers_1_to_11": {"const": 13}
+              }
+            },
+            "ffn_output_to_ln2_checkpoint_net_recovered": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["layer_0", "layers_1_to_11"],
+              "properties": {
+                "layer_0": {"const": 26},
+                "layers_1_to_11": {"const": 24}
+              }
+            },
+            "ln2_checkpoint_to_raw_output_consumed": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["layer_0", "layers_1_to_11"],
+              "properties": {
+                "layer_0": {"const": 11},
+                "layers_1_to_11": {"const": 11}
+              }
+            },
+            "previous_raw_output_to_input_recovered": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["layer_0", "layers_1_to_11"],
+              "properties": {
+                "layer_0": {"const": null},
+                "layers_1_to_11": {"const": 11}
+              }
+            }
+          }
+        },
+        "checkpoint_metadata_digest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "canonicalization", "layer_order", "fields"],
+          "properties": {
+            "algorithm": {"const": "SHA-256"},
+            "canonicalization": {"const": "MOAI-json-sort-keys-compact-utf8-v1"},
+            "layer_order": {"const": "0 through 11"},
+            "fields": {
+              "const": [
+                "layer_id",
+                "input_metadata",
+                "softmax_denominator_metadata",
+                "attention_output_metadata",
+                "ln1_variance_metadata",
+                "ln1_output_metadata",
+                "ffn_output_metadata",
+                "ln2_variance_metadata",
+                "raw_output_metadata"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "operation_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rotations",
+        "ct_pt_multiplications",
+        "ct_ct_multiplications",
+        "explicit_rescale_requests",
+        "chebyshev_evaluations",
+        "estimated_polynomial_multiplications",
+        "bootstraps",
+        "bootstrap_iterations"
+      ],
+      "properties": {
+        "rotations": {"type": "integer", "minimum": 0},
+        "ct_pt_multiplications": {"type": "integer", "minimum": 0},
+        "ct_ct_multiplications": {"type": "integer", "minimum": 0},
+        "explicit_rescale_requests": {"type": "integer", "minimum": 0},
+        "chebyshev_evaluations": {"type": "integer", "minimum": 0},
+        "estimated_polynomial_multiplications": {"type": "integer", "minimum": 0},
+        "bootstraps": {"type": "integer", "minimum": 0},
+        "bootstrap_iterations": {"type": "integer", "minimum": 0}
+      }
+    },
+    "layer_operation_counts": {
+      "const": {
+        "rotations": 6300,
+        "ct_pt_multiplications": 51885,
+        "ct_ct_multiplications": 95,
+        "explicit_rescale_requests": 810,
+        "chebyshev_evaluations": 55,
+        "estimated_polynomial_multiplications": 1150,
+        "bootstraps": 25,
+        "bootstrap_iterations": 50
+      }
+    },
+    "refresh_operation_counts": {
+      "enum": [
+        {
+          "rotations": 0,
+          "ct_pt_multiplications": 0,
+          "ct_ct_multiplications": 0,
+          "explicit_rescale_requests": 0,
+          "chebyshev_evaluations": 0,
+          "estimated_polynomial_multiplications": 0,
+          "bootstraps": 0,
+          "bootstrap_iterations": 0
+        },
+        {
+          "rotations": 0,
+          "ct_pt_multiplications": 5,
+          "ct_ct_multiplications": 0,
+          "explicit_rescale_requests": 5,
+          "chebyshev_evaluations": 0,
+          "estimated_polynomial_multiplications": 0,
+          "bootstraps": 5,
+          "bootstrap_iterations": 10
+        }
+      ]
+    },
+    "zero_operation_counts": {
+      "const": {
+        "rotations": 0,
+        "ct_pt_multiplications": 0,
+        "ct_ct_multiplications": 0,
+        "explicit_rescale_requests": 0,
+        "chebyshev_evaluations": 0,
+        "estimated_polynomial_multiplications": 0,
+        "bootstraps": 0,
+        "bootstrap_iterations": 0
+      }
+    },
+    "inter_layer_refresh_operation_counts": {
+      "const": {
+        "rotations": 0,
+        "ct_pt_multiplications": 5,
+        "ct_ct_multiplications": 0,
+        "explicit_rescale_requests": 5,
+        "chebyshev_evaluations": 0,
+        "estimated_polynomial_multiplications": 0,
+        "bootstraps": 5,
+        "bootstrap_iterations": 10
+      }
+    },
+    "total_operation_counts": {
+      "const": {
+        "rotations": 75600,
+        "ct_pt_multiplications": 622675,
+        "ct_ct_multiplications": 1140,
+        "explicit_rescale_requests": 9775,
+        "chebyshev_evaluations": 660,
+        "estimated_polynomial_multiplications": 13800,
+        "bootstraps": 355,
+        "bootstrap_iterations": 710
+      }
+    },
+    "cumulative_operation_counts": {
+      "enum": [
+        {"rotations": 6300, "ct_pt_multiplications": 51890, "ct_ct_multiplications": 95, "explicit_rescale_requests": 815, "chebyshev_evaluations": 55, "estimated_polynomial_multiplications": 1150, "bootstraps": 30, "bootstrap_iterations": 60},
+        {"rotations": 12600, "ct_pt_multiplications": 103780, "ct_ct_multiplications": 190, "explicit_rescale_requests": 1630, "chebyshev_evaluations": 110, "estimated_polynomial_multiplications": 2300, "bootstraps": 60, "bootstrap_iterations": 120},
+        {"rotations": 18900, "ct_pt_multiplications": 155670, "ct_ct_multiplications": 285, "explicit_rescale_requests": 2445, "chebyshev_evaluations": 165, "estimated_polynomial_multiplications": 3450, "bootstraps": 90, "bootstrap_iterations": 180},
+        {"rotations": 25200, "ct_pt_multiplications": 207560, "ct_ct_multiplications": 380, "explicit_rescale_requests": 3260, "chebyshev_evaluations": 220, "estimated_polynomial_multiplications": 4600, "bootstraps": 120, "bootstrap_iterations": 240},
+        {"rotations": 31500, "ct_pt_multiplications": 259450, "ct_ct_multiplications": 475, "explicit_rescale_requests": 4075, "chebyshev_evaluations": 275, "estimated_polynomial_multiplications": 5750, "bootstraps": 150, "bootstrap_iterations": 300},
+        {"rotations": 37800, "ct_pt_multiplications": 311340, "ct_ct_multiplications": 570, "explicit_rescale_requests": 4890, "chebyshev_evaluations": 330, "estimated_polynomial_multiplications": 6900, "bootstraps": 180, "bootstrap_iterations": 360},
+        {"rotations": 44100, "ct_pt_multiplications": 363230, "ct_ct_multiplications": 665, "explicit_rescale_requests": 5705, "chebyshev_evaluations": 385, "estimated_polynomial_multiplications": 8050, "bootstraps": 210, "bootstrap_iterations": 420},
+        {"rotations": 50400, "ct_pt_multiplications": 415120, "ct_ct_multiplications": 760, "explicit_rescale_requests": 6520, "chebyshev_evaluations": 440, "estimated_polynomial_multiplications": 9200, "bootstraps": 240, "bootstrap_iterations": 480},
+        {"rotations": 56700, "ct_pt_multiplications": 467010, "ct_ct_multiplications": 855, "explicit_rescale_requests": 7335, "chebyshev_evaluations": 495, "estimated_polynomial_multiplications": 10350, "bootstraps": 270, "bootstrap_iterations": 540},
+        {"rotations": 63000, "ct_pt_multiplications": 518900, "ct_ct_multiplications": 950, "explicit_rescale_requests": 8150, "chebyshev_evaluations": 550, "estimated_polynomial_multiplications": 11500, "bootstraps": 300, "bootstrap_iterations": 600},
+        {"rotations": 69300, "ct_pt_multiplications": 570790, "ct_ct_multiplications": 1045, "explicit_rescale_requests": 8965, "chebyshev_evaluations": 605, "estimated_polynomial_multiplications": 12650, "bootstraps": 330, "bootstrap_iterations": 660},
+        {"rotations": 75600, "ct_pt_multiplications": 622675, "ct_ct_multiplications": 1140, "explicit_rescale_requests": 9775, "chebyshev_evaluations": 660, "estimated_polynomial_multiplications": 13800, "bootstraps": 355, "bootstrap_iterations": 710}
+      ]
+    },
+    "range_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "softmax_shifted_logits",
+        "softmax_denominator",
+        "ln1_normalized_variance",
+        "gelu_input",
+        "ln2_normalized_variance"
+      ],
+      "properties": {
+        "softmax_shifted_logits": {"$ref": "#/$defs/interval"},
+        "softmax_denominator": {"$ref": "#/$defs/interval"},
+        "ln1_normalized_variance": {"$ref": "#/$defs/interval"},
+        "gelu_input": {"$ref": "#/$defs/interval"},
+        "ln2_normalized_variance": {"$ref": "#/$defs/interval"}
+      }
+    },
+    "layernorm_registered_interval": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {"type": "number", "minimum": 0.5, "maximum": 1536.0},
+        {"type": "number", "minimum": 0.5, "maximum": 1536.0}
+      ]
+    },
+    "inactive_polynomial_sentinel_ranges": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "softmax_denominator",
+        "ln1_normalized_variance",
+        "ln2_normalized_variance"
+      ],
+      "properties": {
+        "softmax_denominator": {"$ref": "#/$defs/interval"},
+        "ln1_normalized_variance": {"$ref": "#/$defs/layernorm_registered_interval"},
+        "ln2_normalized_variance": {"$ref": "#/$defs/layernorm_registered_interval"}
+      }
+    },
+    "layer_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layer_id",
+        "weights_layer_id",
+        "chain_input_source",
+        "input_metadata",
+        "raw_output_metadata",
+        "softmax_denominator_metadata",
+        "attention_output_metadata",
+        "ln1_variance_metadata",
+        "ln1_output_metadata",
+        "ffn_output_metadata",
+        "ln2_variance_metadata",
+        "input_quality",
+        "output_quality",
+        "exact_trace_diagnostic",
+        "inactive_max_abs",
+        "inactive_zero_checkpoint_count",
+        "inactive_sentinel_max_error",
+        "inactive_polynomial_sentinel_ranges",
+        "inactive_sentinel_range_status",
+        "encrypted_polynomial_input_ranges",
+        "handoff_refresh_performed",
+        "refresh_operation_counts",
+        "layer_operation_counts",
+        "cumulative_operation_counts",
+        "finite",
+        "range_status"
+      ],
+      "properties": {
+        "layer_id": {"type": "integer", "minimum": 0, "maximum": 11},
+        "weights_layer_id": {"type": "integer", "minimum": 0, "maximum": 11},
+        "chain_input_source": {
+          "enum": ["client_encrypted_trace_input", "previous_ciphertext_output_after_refresh"]
+        },
+        "input_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "raw_output_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "softmax_denominator_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "attention_output_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "ln1_variance_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "ln1_output_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "ffn_output_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "ln2_variance_metadata": {"$ref": "#/$defs/tensor_metadata"},
+        "input_quality": {"$ref": "#/$defs/quality"},
+        "output_quality": {"$ref": "#/$defs/quality"},
+        "exact_trace_diagnostic": {"$ref": "#/$defs/quality"},
+        "inactive_max_abs": {"type": "number", "minimum": 0, "maximum": 0.001},
+        "inactive_zero_checkpoint_count": {"const": 28},
+        "inactive_sentinel_max_error": {"type": "number", "minimum": 0},
+        "inactive_polynomial_sentinel_ranges": {"$ref": "#/$defs/inactive_polynomial_sentinel_ranges"},
+        "inactive_sentinel_range_status": {"const": "passed"},
+        "encrypted_polynomial_input_ranges": {"$ref": "#/$defs/range_evidence"},
+        "handoff_refresh_performed": {"type": "boolean"},
+        "refresh_operation_counts": {"$ref": "#/$defs/refresh_operation_counts"},
+        "layer_operation_counts": {"$ref": "#/$defs/layer_operation_counts"},
+        "cumulative_operation_counts": {"$ref": "#/$defs/cumulative_operation_counts"},
+        "finite": {"const": true},
+        "range_status": {"const": "passed"}
+      }
+    },
+    "layer0_metric_regime": {
+      "type": "object",
+      "properties": {
+        "chain_input_source": {"const": "client_encrypted_trace_input"},
+        "input_metadata": {"$ref": "#/$defs/observed_layer0_input_metadata"},
+        "raw_output_metadata": {"$ref": "#/$defs/observed_raw_output_metadata"},
+        "softmax_denominator_metadata": {"$ref": "#/$defs/observed_softmax_checkpoint_metadata"},
+        "attention_output_metadata": {"$ref": "#/$defs/observed_layer0_attention_output_metadata"},
+        "ln1_variance_metadata": {"$ref": "#/$defs/observed_layernorm_checkpoint_metadata"},
+        "ln1_output_metadata": {"$ref": "#/$defs/observed_layer0_ln1_output_metadata"},
+        "ffn_output_metadata": {"$ref": "#/$defs/observed_layer0_ffn_output_metadata"},
+        "ln2_variance_metadata": {"$ref": "#/$defs/observed_layernorm_checkpoint_metadata"}
+      }
+    },
+    "post_refresh_metric_regime": {
+      "type": "object",
+      "properties": {
+        "chain_input_source": {"const": "previous_ciphertext_output_after_refresh"},
+        "input_metadata": {"$ref": "#/$defs/observed_handoff_input_metadata"},
+        "raw_output_metadata": {"$ref": "#/$defs/observed_raw_output_metadata"},
+        "softmax_denominator_metadata": {"$ref": "#/$defs/observed_softmax_checkpoint_metadata"},
+        "attention_output_metadata": {"$ref": "#/$defs/observed_post_refresh_attention_output_metadata"},
+        "ln1_variance_metadata": {"$ref": "#/$defs/observed_layernorm_checkpoint_metadata"},
+        "ln1_output_metadata": {"$ref": "#/$defs/observed_post_refresh_ln1_output_metadata"},
+        "ffn_output_metadata": {"$ref": "#/$defs/observed_post_refresh_ffn_output_metadata"},
+        "ln2_variance_metadata": {"$ref": "#/$defs/observed_layernorm_checkpoint_metadata"}
+      }
+    },
+    "layer_position_0": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 0},
+        "weights_layer_id": {"const": 0},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 6300, "ct_pt_multiplications": 51890, "ct_ct_multiplications": 95, "explicit_rescale_requests": 815, "chebyshev_evaluations": 55, "estimated_polynomial_multiplications": 1150, "bootstraps": 30, "bootstrap_iterations": 60}}
+      }
+    },
+    "layer_position_1": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 1},
+        "weights_layer_id": {"const": 1},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 12600, "ct_pt_multiplications": 103780, "ct_ct_multiplications": 190, "explicit_rescale_requests": 1630, "chebyshev_evaluations": 110, "estimated_polynomial_multiplications": 2300, "bootstraps": 60, "bootstrap_iterations": 120}}
+      }
+    },
+    "layer_position_2": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 2},
+        "weights_layer_id": {"const": 2},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 18900, "ct_pt_multiplications": 155670, "ct_ct_multiplications": 285, "explicit_rescale_requests": 2445, "chebyshev_evaluations": 165, "estimated_polynomial_multiplications": 3450, "bootstraps": 90, "bootstrap_iterations": 180}}
+      }
+    },
+    "layer_position_3": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 3},
+        "weights_layer_id": {"const": 3},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 25200, "ct_pt_multiplications": 207560, "ct_ct_multiplications": 380, "explicit_rescale_requests": 3260, "chebyshev_evaluations": 220, "estimated_polynomial_multiplications": 4600, "bootstraps": 120, "bootstrap_iterations": 240}}
+      }
+    },
+    "layer_position_4": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 4},
+        "weights_layer_id": {"const": 4},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 31500, "ct_pt_multiplications": 259450, "ct_ct_multiplications": 475, "explicit_rescale_requests": 4075, "chebyshev_evaluations": 275, "estimated_polynomial_multiplications": 5750, "bootstraps": 150, "bootstrap_iterations": 300}}
+      }
+    },
+    "layer_position_5": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 5},
+        "weights_layer_id": {"const": 5},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 37800, "ct_pt_multiplications": 311340, "ct_ct_multiplications": 570, "explicit_rescale_requests": 4890, "chebyshev_evaluations": 330, "estimated_polynomial_multiplications": 6900, "bootstraps": 180, "bootstrap_iterations": 360}}
+      }
+    },
+    "layer_position_6": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 6},
+        "weights_layer_id": {"const": 6},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 44100, "ct_pt_multiplications": 363230, "ct_ct_multiplications": 665, "explicit_rescale_requests": 5705, "chebyshev_evaluations": 385, "estimated_polynomial_multiplications": 8050, "bootstraps": 210, "bootstrap_iterations": 420}}
+      }
+    },
+    "layer_position_7": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 7},
+        "weights_layer_id": {"const": 7},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 50400, "ct_pt_multiplications": 415120, "ct_ct_multiplications": 760, "explicit_rescale_requests": 6520, "chebyshev_evaluations": 440, "estimated_polynomial_multiplications": 9200, "bootstraps": 240, "bootstrap_iterations": 480}}
+      }
+    },
+    "layer_position_8": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 8},
+        "weights_layer_id": {"const": 8},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 56700, "ct_pt_multiplications": 467010, "ct_ct_multiplications": 855, "explicit_rescale_requests": 7335, "chebyshev_evaluations": 495, "estimated_polynomial_multiplications": 10350, "bootstraps": 270, "bootstrap_iterations": 540}}
+      }
+    },
+    "layer_position_9": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 9},
+        "weights_layer_id": {"const": 9},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 63000, "ct_pt_multiplications": 518900, "ct_ct_multiplications": 950, "explicit_rescale_requests": 8150, "chebyshev_evaluations": 550, "estimated_polynomial_multiplications": 11500, "bootstraps": 300, "bootstrap_iterations": 600}}
+      }
+    },
+    "layer_position_10": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 10},
+        "weights_layer_id": {"const": 10},
+        "handoff_refresh_performed": {"const": true},
+        "refresh_operation_counts": {"$ref": "#/$defs/inter_layer_refresh_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 69300, "ct_pt_multiplications": 570790, "ct_ct_multiplications": 1045, "explicit_rescale_requests": 8965, "chebyshev_evaluations": 605, "estimated_polynomial_multiplications": 12650, "bootstraps": 330, "bootstrap_iterations": 660}}
+      }
+    },
+    "layer_position_11": {
+      "type": "object",
+      "properties": {
+        "layer_id": {"const": 11},
+        "weights_layer_id": {"const": 11},
+        "handoff_refresh_performed": {"const": false},
+        "refresh_operation_counts": {"$ref": "#/$defs/zero_operation_counts"},
+        "cumulative_operation_counts": {"const": {"rotations": 75600, "ct_pt_multiplications": 622675, "ct_ct_multiplications": 1140, "explicit_rescale_requests": 9775, "chebyshev_evaluations": 660, "estimated_polynomial_multiplications": 13800, "bootstraps": 355, "bootstrap_iterations": 710}}
+      }
+    },
+    "phase_latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_load_oracle_ms",
+        "setup_keygen_ms",
+        "client_encrypt_ms",
+        "server_online_diagnostic_ms",
+        "client_checkpoint_validate_ms"
+      ],
+      "properties": {
+        "fixture_load_oracle_ms": {"type": "number", "minimum": 0},
+        "setup_keygen_ms": {"type": "number", "minimum": 0},
+        "client_encrypt_ms": {"type": "number", "minimum": 0},
+        "server_online_diagnostic_ms": {"type": "number", "minimum": 0.000000001},
+        "client_checkpoint_validate_ms": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}

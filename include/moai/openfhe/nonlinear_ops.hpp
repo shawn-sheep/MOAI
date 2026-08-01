@@ -98,13 +98,15 @@ public:
         const CipherTensor& input,
         const std::vector<double>& gamma,
         const std::vector<double>& beta,
-        PaperCompatLayerNormSite site);
+        PaperCompatLayerNormSite site,
+        std::size_t layer);
 
     [[nodiscard]] LayerNormResult FeaturePackedLayerNormWithCheckpoints(
         const CipherTensor& input,
         const std::vector<double>& gamma,
         const std::vector<double>& beta,
-        PaperCompatLayerNormSite site);
+        PaperCompatLayerNormSite site,
+        std::size_t layer);
 
     [[nodiscard]] FeedForwardResult FeedForward(
         const CipherTensor& input,
@@ -132,6 +134,10 @@ private:
     [[nodiscard]] CipherTensor ApplyMask(
         const CipherTensor& input,
         const std::vector<double>& active_mask);
+
+    [[nodiscard]] CipherTensor MultiplyPostBootstrapSingleScalePlain(
+        const CipherTensor& input,
+        const std::vector<double>& values);
 
     [[nodiscard]] CipherTensor Affine(
         const CipherTensor& input,

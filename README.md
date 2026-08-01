@@ -11,7 +11,12 @@ public model weights, and an evaluation-key bundle. The only accepted parameter 
 is `paper_compat`, which always reports `security_claim=none`. These research
 reproduction parameters do not support a 128-bit security claim. M5 is complete only
 after its full clean-commit ciphertext gate and fail-closed artifact validator pass;
-plaintext preflights and shortened diagnostics are not completion evidence.
+plaintext preflights and shortened diagnostics are not completion evidence. A reviewed
+two-layer live calibration supplied the original M5 schedule candidate. The approved
+exact-three live run has since validated the second handoff and later-layer regime and
+transitioned the profile to `sealed_exact3`. That shortened run remains
+`artifact_eligible=false` and satisfies only the schedule prerequisite; the formal live
+M4 regression and full 12-layer runnable-prototype gate remain required.
 
 Configure, build, and run the fast gates:
 
@@ -85,18 +90,31 @@ ctest --test-dir build-openfhe --output-on-failure \
 ```
 
 On the development host the full correctness gate uses roughly 31 GiB peak RSS and
-takes about 31 minutes. This is a correctness observation, not an M6 benchmark. After
-the milestone commit has been pushed and the local and remote branch SHAs match, seal
-one warm-up plus five measured runs with:
+takes about 31 minutes. This is a correctness observation, not an M6 benchmark. The
+current depth-12 graph still needs a formal live M4 pass on the clean milestone source.
+The v5 code contract is aligned with the depth-12/post-inverse-cleanup counts, but is not
+current evidence until that gate passes, the milestone commit is pushed, and
+local/remote branch SHAs match. The intended runner is:
 
 ```bash
 /home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
-  scripts/run_openfhe_encoder_artifact.py
+  scripts/run_openfhe_encoder_artifact_v5.py
 ```
 
-The sealed M4 artifact establishes only the one-layer result; it does not by itself
+The historical v2 contract remains byte-preserved. The v5 runner/schema/validator code
+contract is aligned with the current post-inverse-cleanup graph, but no new M4 artifact
+is claimed by code alignment alone. Any resulting M4 artifact establishes only the
+one-layer result; it does not by itself
 establish 12-layer ciphertext execution, task-level inference, or a speedup over the
 optional SEAL reference.
+
+Both active artifact runners discard the ignored build-tree configuration with a fixed
+`/usr/bin/cmake --fresh` configure before their clean-first build. Configure, build,
+CTest, linkage inspection, workload, and validator subprocesses share one scrubbed
+environment. The manifest binds the resulting `CMakeCache.txt`, four OpenFHE CMake
+package files, the canonical `include/openfhe` tree, and the exact three resolved
+OpenFHE 1.5.1 shared libraries by path, byte count, and SHA-256. Any byte or linkage
+drift before or after a workload fails closed.
 
 The M5 target consumes the client-encrypted layer-0 input once, evaluates all 12 ordered
 public weight sets, and passes each layer output to the next only after the frozen native
@@ -105,32 +123,54 @@ observer solely to decrypt and validate ciphertext checkpoints. The server libra
 API do not receive a private key, a decryptor, or plaintext activations; this is an API
 trust boundary, not a claim of process isolation.
 
-Run the fail-before-HE contracts and the inexpensive plaintext gates first:
+Each FeaturePacked LayerNorm site selects the public trace-scale factor `D`, adds the
+public active epsilon, and preconditions the variance by 2048 before native bootstrap:
+active slots carry `u/2048` and inactive guard slots carry `1/2048`. One uniform public
+multiplication restores all 1024 slots by 2048 before inverse-square-root evaluation.
+After that polynomial, one public 768-prefix Ct-Pt mask plus an explicit rescale cleans
+the inverse branch before the centered Ct-Ct merge; the centered branch receives the
+per-token public `gamma*sqrt(D)` factor. The post-bootstrap required depth is 12.
+Restored inactive guards need only be finite and inside `[0.5,1536]`; deviation from one
+is diagnostic. The standalone FeaturePacked and M4 single-layer output tail retains the
+hard `1e-6` gate; only M5 exact-three/full-12 uses the top-level `1e-3` prototype gate.
+The candidate per-layer operation tuple is
+`6300/51885/95/810/55/1150/25/50`. This does not change the single-mask weighted-V
+cleanup or inter-layer refresh contract.
+
+Run the fail-closed contracts and the focused LayerNorm HE gate first:
 
 ```bash
 ctest --test-dir build-openfhe --output-on-failure \
-  -R 'openfhe_(m5_artifact_(schema|validator)_contract|encoder12_artifact_runner_contract|encoder_12_layer_(preflight|crypto_preflight))'
+  -R 'openfhe_(feature_layernorm_smoke|m5_v6_artifact_(schema|validator)_contract|m5_v6_encoder12_artifact_runner_contract|encoder_12_layer_(preflight|crypto_preflight))'
 ```
 
-An explicitly labelled two-layer exact-prefix run may be used to inspect the layer-0 to
-layer-1 ciphertext seam. It is never artifact-eligible and cannot replace the full gate:
+The registered exact-three diagnostic validates both layer-0-to-layer-1 and
+layer-1-to-layer-2 handoffs, including the later-layer steady-state tuple. Exact one- and
+two-layer diagnostics can never emit `formal_schedule_sealed=true`; exact three may do so
+only in its successful final summary. Every shortened run remains
+`artifact_eligible=false` and cannot replace the full gate:
 
 ```bash
-./build-openfhe/openfhe_encoder_12_layer_smoke \
-  --data-root data --diagnostic-layer-count 2
+ctest --test-dir build-openfhe --output-on-failure \
+  -R '^openfhe_encoder_3_layer_exact_smoke$'
 ```
 
-The formal correctness gate evaluates all 12 ciphertext layers, checks every layer
-against the chained frozen-polynomial oracle and exact-trace diagnostic, validates every
+The runnable-prototype correctness gate evaluates all 12 ciphertext layers, checks every
+layer against the chained frozen-polynomial oracle and exact-trace diagnostic, validates every
 encrypted polynomial input range on the client, and requires exactly 28 uniquely named
 zero-valued encoded logical checkpoint tensors per layer to pass the inactive/cross-lane
-`1e-6` gate. Label-to-width mapping is also frozen: 19 checkpoints expose a 768-active/
+`1e-3` M5 prototype gate. This is a user-authorized engineering bound: legacy MOAI did
+not assert inactive values, so it is not a claimed legacy threshold or strict numerical
+parity. M2/M3/M4 keep their existing `1e-6` gates. Label-to-width mapping is also frozen:
+19 checkpoints expose a 768-active/
 256-inactive tail, while nine full-width intermediate checkpoints have no encoded
 inactive tail. This gate covers the 1024 explicitly encoded slots, not the unused
-remainder of the 32768-slot ring capacity. The three public value-one sentinel channels
-are separate: their actual values must stay in the frozen approximation interval, while
-deviation from one is diagnostic and is not subject to the zero-inactive threshold. Final
-acceptance bounds are rel-L2 `<= 5e-2`, cosine `>= 0.99`, and no NaN/Inf. It is a
+remainder of the 32768-slot ring capacity. The three public sentinel channels are
+separate: all must stay in their frozen approximation intervals. For LayerNorm, restored
+inactive-guard deviation from one is diagnostic only; the downstream output inactive
+tail remains covered by the M5 `1e-3` prototype gate. The Softmax denominator deviation also
+remains diagnostic. Final acceptance bounds are rel-L2
+`<= 5e-2`, cosine `>= 0.99`, and no NaN/Inf. It is a
 very-slow correctness test and does not make a latency claim:
 
 ```bash
@@ -138,15 +178,20 @@ ctest --test-dir build-openfhe --output-on-failure \
   -R '^openfhe_encoder_12_layer_smoke$'
 ```
 
-Only after that test passes on a clean milestone commit, the branch is pushed, and the
-local and live remote SHAs match, seal one non-benchmark correctness execution with:
+The exact-three schedule prerequisite is satisfied and bound to its approved live
+evidence. Only after the live M4 regression and formal 12-layer gate pass, the clean
+milestone commit is pushed, and local/live-remote SHAs match should one non-benchmark
+correctness execution be sealed with:
 
 ```bash
 /home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
-  scripts/run_openfhe_encoder12_artifact.py
+  scripts/run_openfhe_encoder12_artifact_v6.py
 ```
 
-The M5 runner fixes and rehashes the executable plus all frozen inputs around the run,
+The M5 v6 runner/schema/validator code contract is aligned with the sealed schedule and
+prototype threshold, but it is not milestone evidence until the live M4 regression,
+full 12-layer validation, clean commit/push, and live-remote SHA verification all pass. It
+rehashes the executable and frozen inputs, requires the layer-1/level-29 M4 regression,
 requires 12 ordered layer records and 11 inter-layer refreshes, rejects diagnostic or
 calibration stdout, and delegates the sealed directory to the independent schema and
 semantic validator. M5 still excludes task-level inference and any SEAL speedup claim.

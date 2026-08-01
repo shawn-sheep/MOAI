@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -65,6 +66,52 @@ CipherTensor NonlinearOps::ApplyMask(
     server_.RequireUsableLevels(input, 1, "active-mask multiplication");
     const auto mask = server_.EncodeModelVector(active_mask, input.packing);
     return server_.Rescale(server_.MultiplyPlain(input, {mask}));
+}
+
+CipherTensor NonlinearOps::MultiplyPostBootstrapSingleScalePlain(
+    const CipherTensor& input,
+    const std::vector<double>& values) {
+    if (input.empty() || values.size() != input.packing.active_slots ||
+        !std::all_of(values.begin(), values.end(), [](double value) {
+            return std::isfinite(value);
+        })) {
+        throw std::invalid_argument(
+            "post-bootstrap public multiplier does not match CipherTensor");
+    }
+    if (input.packing.noise_scale_degree != 2 ||
+        input.packing.level == std::numeric_limits<uint32_t>::max()) {
+        throw std::invalid_argument(
+            "post-bootstrap public multiplication requires a double-scale ciphertext");
+    }
+    server_.RequireUsableLevels(input, 1, "post-bootstrap public multiplication");
+    const auto before_remaining = server_.RemainingLevels(input);
+    const auto plaintext = server_.EncodeSingleScaleModelVector(
+        values,
+        input.packing);
+    auto output = server_.MultiplyPlain(input, {plaintext});
+    const double input_scale_bits =
+        std::log2(input.packing.scaling_factor);
+    const double output_scale_bits =
+        std::log2(output.packing.scaling_factor);
+    if (output.packing.level != input.packing.level + 1 ||
+        output.packing.noise_scale_degree != 2 ||
+        server_.RemainingLevels(output) + 1 != before_remaining ||
+        !std::isfinite(input_scale_bits) ||
+        !std::isfinite(output_scale_bits) ||
+        std::abs(output_scale_bits - input_scale_bits) > 1e-3) {
+        std::ostringstream message;
+        message << "post-bootstrap public multiplication metadata transition changed: input=("
+                << input.packing.level << ','
+                << input.packing.noise_scale_degree << ','
+                << before_remaining << ','
+                << input_scale_bits << ") output=("
+                << output.packing.level << ','
+                << output.packing.noise_scale_degree << ','
+                << server_.RemainingLevels(output) << ','
+                << output_scale_bits << ')';
+        throw std::logic_error(message.str());
+    }
+    return output;
 }
 
 CipherTensor NonlinearOps::EvaluatePolynomial(
@@ -402,23 +449,35 @@ CipherTensor NonlinearOps::FeaturePackedLayerNorm(
     const CipherTensor& input,
     const std::vector<double>& gamma,
     const std::vector<double>& beta,
-    PaperCompatLayerNormSite site) {
-    return FeaturePackedLayerNormWithCheckpoints(input, gamma, beta, site).output;
+    PaperCompatLayerNormSite site,
+    std::size_t layer) {
+    return FeaturePackedLayerNormWithCheckpoints(
+        input,
+        gamma,
+        beta,
+        site,
+        layer)
+        .output;
 }
 
 LayerNormResult NonlinearOps::FeaturePackedLayerNormWithCheckpoints(
     const CipherTensor& input,
     const std::vector<double>& gamma,
     const std::vector<double>& beta,
-    PaperCompatLayerNormSite site) {
+    PaperCompatLayerNormSite site,
+    std::size_t layer) {
     if (input.empty() || input.packing.layout != PackingLayout::kContiguous ||
+        input.size() != kPaperCompatLayerNormTraceTokens ||
+        input.packing.batch_lanes != 1 ||
+        input.packing.active_slots != kPaperCompatLayerNormFeatureSlots ||
+        input.packing.encoded_slots != kPaperCompatLayerNormFeatureSlots ||
         input.packing.logical_shape.size() != 2 ||
         input.packing.logical_shape[0] != input.packing.active_slots ||
         input.packing.logical_shape[1] != input.size() ||
-        gamma.empty() || gamma.size() != beta.size() ||
-        gamma.size() > input.packing.active_slots) {
+        gamma.size() != kPaperCompatLayerNormHiddenSize ||
+        beta.size() != kPaperCompatLayerNormHiddenSize) {
         throw std::invalid_argument(
-            "feature-packed LayerNorm dimensions do not match");
+            "feature-packed LayerNorm requires the frozen 5x768/1024 trace shape");
     }
     if (!std::all_of(gamma.begin(), gamma.end(), [](double value) {
             return std::isfinite(value);
@@ -430,18 +489,8 @@ LayerNormResult NonlinearOps::FeaturePackedLayerNormWithCheckpoints(
             "feature-packed LayerNorm parameters are non-finite");
     }
 
-    double variance_scale = 0.0;
-    switch (site) {
-        case PaperCompatLayerNormSite::kAttentionResidual:
-            variance_scale = kPaperCompatLayerNorm1VarianceScale;
-            break;
-        case PaperCompatLayerNormSite::kFeedForwardResidual:
-            variance_scale = kPaperCompatLayerNorm2VarianceScale;
-            break;
-        default:
-            throw std::invalid_argument(
-                "feature-packed LayerNorm site violates paper_compat");
-    }
+    const auto variance_scales =
+        PaperCompatLayerNormVarianceScales(site, layer);
 
     std::vector<double> active_mask(input.packing.active_slots, 0.0);
     std::fill_n(active_mask.begin(), gamma.size(), 1.0);
@@ -461,43 +510,78 @@ LayerNormResult NonlinearOps::FeaturePackedLayerNormWithCheckpoints(
     const auto centered = server_.Subtract(masked_input, mean);
     const auto squared = server_.Rescale(server_.Multiply(centered, centered));
     auto variance = server_.SumSlots(squared);
-    const auto variance_multiplier = MaskedConstant(
-        active_mask,
-        variance_scale / static_cast<double>(gamma.size()));
+    // Precondition both the active variance and the public inverse-square-root
+    // guard before native bootstrap.  Active inputs in the frozen
+    // [0.5, 1536] interval map to [2^-12, 0.75], while the padding guard maps
+    // from 1 to 2^-11.  The uniform public multiplication below restores the
+    // original polynomial domain without a post-bootstrap packed projector.
+    const double bootstrap_preconditioner =
+        kPaperCompatLayerNormBootstrapPreconditioner;
+    std::vector<lbcrypto::Plaintext> variance_multipliers;
+    variance_multipliers.reserve(input.size());
+    for (const double variance_scale : variance_scales) {
+        const auto variance_multiplier = MaskedConstant(
+            active_mask,
+            variance_scale /
+                (static_cast<double>(gamma.size()) * bootstrap_preconditioner));
+        variance_multipliers.push_back(
+            server_.EncodeModelVector(variance_multiplier, variance.packing));
+    }
     variance = server_.Rescale(server_.MultiplyPlain(
         variance,
-        {server_.EncodeModelVector(
-            variance_multiplier,
-            variance.packing)}));
+        variance_multipliers));
 
-    std::vector<double> safe_variance_add(active_mask.size());
-    for (std::size_t slot = 0; slot < active_mask.size(); ++slot) {
-        safe_variance_add[slot] = active_mask[slot] > 0.5
-            ? kPaperCompatLayerNormEpsilon * variance_scale
-            : 1.0;
+    // Apply the public gamma on the centered branch after the variance branch
+    // has finished reading `centered`.  Hoisting this Ct-Pt multiplication
+    // keeps the post-bootstrap critical path unchanged when the public mask
+    // below is added.  The variance itself must remain gamma-independent.
+    std::vector<lbcrypto::Plaintext> gamma_plaintexts;
+    gamma_plaintexts.reserve(input.size());
+    std::vector<double> beta_slots(input.packing.active_slots, 0.0);
+    for (const double variance_scale : variance_scales) {
+        const double scale_compensation = std::sqrt(variance_scale);
+        std::vector<double> gamma_slots(input.packing.active_slots, 0.0);
+        for (std::size_t feature = 0; feature < gamma.size(); ++feature) {
+            gamma_slots[feature] = gamma[feature] * scale_compensation;
+            beta_slots[feature] = beta[feature];
+        }
+        gamma_plaintexts.push_back(
+            server_.EncodeModelVector(gamma_slots, centered.packing));
     }
-    variance = server_.AddPlain(variance, {safe_variance_add});
+    const auto gamma_scaled_centered = server_.Rescale(server_.MultiplyPlain(
+        centered,
+        gamma_plaintexts));
+
+    std::vector<std::vector<double>> preconditioned_adds;
+    preconditioned_adds.reserve(input.size());
+    for (const double variance_scale : variance_scales) {
+        std::vector<double> preconditioned_add(active_mask.size());
+        for (std::size_t slot = 0; slot < active_mask.size(); ++slot) {
+            preconditioned_add[slot] = active_mask[slot] > 0.5
+                ? kPaperCompatLayerNormEpsilon * variance_scale /
+                    bootstrap_preconditioner
+                : 1.0 / bootstrap_preconditioner;
+        }
+        preconditioned_adds.push_back(std::move(preconditioned_add));
+    }
+    variance = server_.AddPlain(variance, preconditioned_adds);
     variance = server_.Bootstrap(variance);
+    variance = MultiplyPostBootstrapSingleScalePlain(
+        variance,
+        std::vector<double>(active_mask.size(), bootstrap_preconditioner));
 
     LayerNormResult result;
     result.normalized_variance = variance;
-    const auto inverse_scaled = EvaluatePolynomial(
+    auto inverse_scaled = EvaluatePolynomial(
         variance,
         contracts_.layernorm_inverse_sqrt,
         2);
-    const auto normalized =
-        server_.Rescale(server_.Multiply(centered, inverse_scaled));
-
-    const double scale_compensation = std::sqrt(variance_scale);
-    std::vector<double> gamma_slots(input.packing.active_slots, 0.0);
-    std::vector<double> beta_slots(input.packing.active_slots, 0.0);
-    for (std::size_t feature = 0; feature < gamma.size(); ++feature) {
-        gamma_slots[feature] = gamma[feature] * scale_compensation;
-        beta_slots[feature] = beta[feature];
-    }
-    auto output = server_.Rescale(server_.MultiplyPlain(
-        normalized,
-        {server_.EncodeModelVector(gamma_slots, normalized.packing)}));
+    // The public inverse-square-root guard is needed only while evaluating the
+    // polynomial.  Remove it before the Ct-Ct merge so both multiplicands
+    // expose the same 768-feature activation boundary.
+    inverse_scaled = ApplyMask(inverse_scaled, active_mask);
+    auto output = server_.Rescale(
+        server_.Multiply(gamma_scaled_centered, inverse_scaled));
     result.output = server_.AddPlain(output, {beta_slots});
     return result;
 }

@@ -67,6 +67,13 @@ public:
 private:
     friend class NonlinearOps;
 
+    // Encode one public CKKS scale at the level of a double-scale ciphertext.
+    // This is intentionally private and is consumed only by the checked
+    // post-bootstrap public-multiplication path in NonlinearOps.
+    [[nodiscard]] lbcrypto::Plaintext EncodeSingleScaleModelVector(
+        const std::vector<double>& values,
+        const PackingSpec& double_scale_packing) const;
+
     [[nodiscard]] CipherTensor EvaluateChebyshev(
         const CipherTensor& input,
         const ApproximationContract& contract);

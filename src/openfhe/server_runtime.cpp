@@ -419,6 +419,38 @@ lbcrypto::Plaintext ServerRuntime::EncodeModelVector(
     return plaintext;
 }
 
+lbcrypto::Plaintext ServerRuntime::EncodeSingleScaleModelVector(
+    const std::vector<double>& values,
+    const PackingSpec& double_scale_packing) const {
+    if (values.size() != double_scale_packing.active_slots ||
+        double_scale_packing.slot_count != profile_.slot_count ||
+        double_scale_packing.encoded_slots <
+            double_scale_packing.active_slots ||
+        double_scale_packing.encoded_slots >
+            double_scale_packing.slot_count ||
+        double_scale_packing.noise_scale_degree != 2) {
+        throw std::invalid_argument(
+            "single-scale model vector requires double-scale input packing");
+    }
+    auto plaintext = context_->MakeCKKSPackedPlaintext(
+        values,
+        1,
+        double_scale_packing.level,
+        nullptr,
+        double_scale_packing.encoded_slots);
+    const double squared_plaintext_scale =
+        plaintext->GetScalingFactor() * plaintext->GetScalingFactor();
+    if (plaintext->GetNoiseScaleDeg() != 1 ||
+        plaintext->GetLevel() != double_scale_packing.level ||
+        !ScalesMatch(
+            squared_plaintext_scale,
+            double_scale_packing.scaling_factor)) {
+        throw std::logic_error(
+            "single-scale model vector does not match double-scale input");
+    }
+    return plaintext;
+}
+
 CipherTensor ServerRuntime::Rotate(
     const CipherTensor& input,
     int32_t index) {

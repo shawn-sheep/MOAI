@@ -1,3 +1,4 @@
+#include "moai/openfhe/approximation_registry.hpp"
 #include "moai/openfhe/client_runtime.hpp"
 #include "moai/openfhe/context_factory.hpp"
 #include "moai/openfhe/encoder_layer.hpp"
@@ -13,6 +14,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -304,6 +306,182 @@ double MaximumInactive(
     return maximum;
 }
 
+struct SentinelRange {
+    double minimum{std::numeric_limits<double>::infinity()};
+    double maximum{-std::numeric_limits<double>::infinity()};
+};
+
+SentinelRange MeasureInactiveSentinelRange(
+    const PlainMatrix& values,
+    std::size_t active_features,
+    const std::string& label) {
+    if (values.empty()) {
+        throw std::runtime_error(label + " is empty");
+    }
+    SentinelRange result;
+    for (const auto& row : values) {
+        if (row.size() != moai::openfhe::kPaperCompatFeatureBlock ||
+            active_features >= row.size()) {
+            throw std::runtime_error(label + " width changed");
+        }
+        for (std::size_t slot = active_features; slot < row.size(); ++slot) {
+            if (!std::isfinite(row[slot])) {
+                throw std::runtime_error(label + " contains NaN or Inf");
+            }
+            result.minimum = std::min(result.minimum, row[slot]);
+            result.maximum = std::max(result.maximum, row[slot]);
+        }
+    }
+    return result;
+}
+
+void RequireValuesInDeclaredRange(
+    const PlainMatrix& values,
+    const moai::openfhe::DeclaredRange& interval,
+    const std::string& label) {
+    if (values.empty() || !std::isfinite(interval.minimum) ||
+        !std::isfinite(interval.maximum) || interval.minimum > interval.maximum) {
+        throw std::runtime_error(label + " range contract is invalid");
+    }
+    for (const auto& row : values) {
+        if (row.size() != moai::openfhe::kPaperCompatFeatureBlock) {
+            throw std::runtime_error(label + " width changed");
+        }
+        for (double value : row) {
+            if (!std::isfinite(value) || value < interval.minimum ||
+                value > interval.maximum) {
+                throw std::runtime_error(label + " escaped its frozen interval");
+            }
+        }
+    }
+}
+
+double MeasureLayerNormInactiveGuardDeviation(
+    const PlainMatrix& values,
+    const std::string& label) {
+    if (values.empty()) {
+        throw std::runtime_error(label + " is empty");
+    }
+    double maximum = 0.0;
+    for (const auto& row : values) {
+        if (row.size() != moai::openfhe::kPaperCompatFeatureBlock) {
+            throw std::runtime_error(label + " width changed");
+        }
+        for (std::size_t slot = moai::openfhe::kPaperCompatHiddenSize;
+             slot < row.size();
+             ++slot) {
+            if (!std::isfinite(row[slot])) {
+                throw std::runtime_error(label + " contains NaN or Inf");
+            }
+            maximum = std::max(maximum, std::abs(row[slot] - 1.0));
+        }
+    }
+    return maximum;
+}
+
+template <typename Operation>
+void RequireRuntimeRejection(Operation&& operation, const std::string& label) {
+    bool rejected = false;
+    try {
+        operation();
+    }
+    catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    if (!rejected) {
+        throw std::runtime_error(label + " was not rejected");
+    }
+}
+
+void ValidateInactiveSentinelContract() {
+    const auto contracts =
+        moai::openfhe::MakePaperCompatNonlinearContracts();
+    PlainMatrix layernorm_guard(
+        1,
+        std::vector<double>(
+            moai::openfhe::kPaperCompatFeatureBlock,
+            17.0));
+    RequireValuesInDeclaredRange(
+        layernorm_guard,
+        contracts.layernorm_inverse_sqrt.interval,
+        "synthetic LayerNorm inactive guard");
+    static_cast<void>(MeasureLayerNormInactiveGuardDeviation(
+        layernorm_guard,
+        "synthetic LayerNorm inactive guard"));
+
+    auto below_domain = layernorm_guard;
+    below_domain.front().back() =
+        std::nextafter(
+            contracts.layernorm_inverse_sqrt.interval.minimum,
+            -std::numeric_limits<double>::infinity());
+    RequireRuntimeRejection(
+        [&below_domain, &contracts]() {
+            RequireValuesInDeclaredRange(
+                below_domain,
+                contracts.layernorm_inverse_sqrt.interval,
+                "synthetic low LayerNorm inactive guard");
+        },
+        "low LayerNorm inactive guard");
+
+    auto above_domain = layernorm_guard;
+    above_domain.front().back() =
+        std::nextafter(
+            contracts.layernorm_inverse_sqrt.interval.maximum,
+            std::numeric_limits<double>::infinity());
+    RequireRuntimeRejection(
+        [&above_domain, &contracts]() {
+            RequireValuesInDeclaredRange(
+                above_domain,
+                contracts.layernorm_inverse_sqrt.interval,
+                "synthetic high LayerNorm inactive guard");
+        },
+        "high LayerNorm inactive guard");
+
+    auto non_finite_domain = layernorm_guard;
+    non_finite_domain.front().back() =
+        std::numeric_limits<double>::quiet_NaN();
+    RequireRuntimeRejection(
+        [&non_finite_domain, &contracts]() {
+            RequireValuesInDeclaredRange(
+                non_finite_domain,
+                contracts.layernorm_inverse_sqrt.interval,
+                "synthetic non-finite LayerNorm inactive guard");
+        },
+        "non-finite LayerNorm inactive guard");
+
+    auto wrong_width_domain = layernorm_guard;
+    wrong_width_domain.front().pop_back();
+    RequireRuntimeRejection(
+        [&wrong_width_domain, &contracts]() {
+            RequireValuesInDeclaredRange(
+                wrong_width_domain,
+                contracts.layernorm_inverse_sqrt.interval,
+                "synthetic wrong-width LayerNorm inactive guard");
+        },
+        "wrong-width LayerNorm inactive guard");
+
+    PlainMatrix identity(
+        1,
+        std::vector<double>(
+            moai::openfhe::kPaperCompatFeatureBlock,
+            1.0));
+    RequireValuesInDeclaredRange(
+        identity,
+        contracts.softmax_reciprocal.interval,
+        "synthetic Softmax denominator");
+    auto escaped_reciprocal = identity;
+    escaped_reciprocal.front().front() =
+        contracts.softmax_reciprocal.interval.minimum / 2.0;
+    RequireRuntimeRejection(
+        [&escaped_reciprocal, &contracts]() {
+            RequireValuesInDeclaredRange(
+                escaped_reciprocal,
+                contracts.softmax_reciprocal.interval,
+                "synthetic escaped Softmax denominator");
+        },
+        "Softmax reciprocal interval escape");
+}
+
 void RequireQuality(
     const QualityMetrics& quality,
     double maximum_relative_l2,
@@ -399,27 +577,61 @@ void PrintPacking(
         << "}\n";
 }
 
+void RequireCheckpointMetadata(
+    const std::string& name,
+    const moai::openfhe::CipherTensor& tensor,
+    const moai::openfhe::ServerRuntime& server,
+    uint32_t expected_level,
+    uint32_t expected_noise_scale_degree,
+    uint32_t expected_remaining_levels,
+    std::size_t expected_ciphertext_count) {
+    const double scale_bits = std::log2(tensor.packing.scaling_factor);
+    const uint32_t remaining_levels = server.RemainingLevels(tensor);
+    if (!std::isfinite(scale_bits) ||
+        std::abs(scale_bits - kExpectedArtifactScaleBits) >
+            kArtifactScaleBitsTolerance ||
+        tensor.packing.level != expected_level ||
+        tensor.packing.noise_scale_degree != expected_noise_scale_degree ||
+        remaining_levels != expected_remaining_levels ||
+        tensor.size() != expected_ciphertext_count) {
+        std::ostringstream message;
+        message << std::setprecision(17) << name
+                << " artifact checkpoint metadata drifted: actual=("
+                << tensor.packing.level << ','
+                << tensor.packing.noise_scale_degree << ','
+                << remaining_levels << ',' << scale_bits << ','
+                << tensor.size() << ") expected=(" << expected_level << ','
+                << expected_noise_scale_degree << ','
+                << expected_remaining_levels << ','
+                << kExpectedArtifactScaleBits << ','
+                << expected_ciphertext_count << ')';
+        throw std::runtime_error(message.str());
+    }
+}
+
 void PrintArtifactCheckpoint(
     const std::string& name,
     const moai::openfhe::CipherTensor& tensor,
-    const moai::openfhe::ServerRuntime& server) {
-    const double scale_bits = std::log2(tensor.packing.scaling_factor);
-    if (!std::isfinite(scale_bits) ||
-        std::abs(scale_bits - kExpectedArtifactScaleBits) >
-            kArtifactScaleBitsTolerance) {
-        std::ostringstream message;
-        message << std::setprecision(17) << name
-                << " artifact checkpoint scale drifted: log2(scale)="
-                << scale_bits << ", expected=" << kExpectedArtifactScaleBits
-                << "+/-" << kArtifactScaleBitsTolerance;
-        throw std::runtime_error(message.str());
-    }
+    const moai::openfhe::ServerRuntime& server,
+    uint32_t expected_level,
+    uint32_t expected_noise_scale_degree,
+    uint32_t expected_remaining_levels,
+    std::size_t expected_ciphertext_count) {
+    RequireCheckpointMetadata(
+        name,
+        tensor,
+        server,
+        expected_level,
+        expected_noise_scale_degree,
+        expected_remaining_levels,
+        expected_ciphertext_count);
+    const uint32_t remaining_levels = server.RemainingLevels(tensor);
     std::cout
         << "{\"name\":\"" << name << "\","
         << "\"level\":" << tensor.packing.level << ','
         << "\"noise_scale_degree\":"
         << tensor.packing.noise_scale_degree << ','
-        << "\"remaining_levels\":" << server.RemainingLevels(tensor) << ','
+        << "\"remaining_levels\":" << remaining_levels << ','
         << "\"scale_bits\":" << kExpectedArtifactScaleBits << ','
         << "\"ciphertext_count\":" << tensor.size() << ','
         << "\"decryption_owner\":\"client\"}";
@@ -644,6 +856,7 @@ int main(int argc, char** argv) {
             arguments.data_root,
             arguments.layer);
         ValidateFixturePreflight(fixture);
+        ValidateInactiveSentinelContract();
         const auto fixture_end = Clock::now();
         if (arguments.preflight_only) {
             std::cout
@@ -807,7 +1020,43 @@ int main(int argc, char** argv) {
             "attention output before bootstrap cleanup");
         RequirePacking(checkpoints.attention.output, 5, "attention output");
         RequirePacking(checkpoints.attention_after_bootstrap, 5, "attention refresh");
+        RequirePacking(
+            checkpoints.attention.denominator_after_bootstrap,
+            5,
+            "Softmax denominator");
+        RequirePacking(
+            checkpoints.attention_layernorm_normalized_variance,
+            5,
+            "attention LayerNorm normalized variance");
         RequirePacking(checkpoints.attention_layernorm, 5, "attention LayerNorm");
+        RequirePacking(
+            checkpoints.output_layernorm_normalized_variance,
+            5,
+            "output LayerNorm normalized variance");
+        RequireCheckpointMetadata(
+            "Softmax denominator",
+            checkpoints.attention.denominator_after_bootstrap,
+            server,
+            18,
+            2,
+            28,
+            5);
+        RequireCheckpointMetadata(
+            "attention LayerNorm normalized variance",
+            checkpoints.attention_layernorm_normalized_variance,
+            server,
+            19,
+            2,
+            27,
+            5);
+        RequireCheckpointMetadata(
+            "output LayerNorm normalized variance",
+            checkpoints.output_layernorm_normalized_variance,
+            server,
+            19,
+            2,
+            27,
+            5);
         RequirePacking(checkpoints.output_layernorm, 5, "output LayerNorm");
 
         double inactive_maximum = 0.0;
@@ -841,6 +1090,10 @@ int main(int argc, char** argv) {
             checkpoints.attention_residual);
         const auto attention_layernorm = client.Decrypt(
             checkpoints.attention_layernorm);
+        const auto softmax_denominator = client.Decrypt(
+            checkpoints.attention.denominator_after_bootstrap);
+        const auto attention_layernorm_normalized_variance = client.Decrypt(
+            checkpoints.attention_layernorm_normalized_variance);
 
         const auto query_quality = MeasureQuality(
             query,
@@ -951,6 +1204,31 @@ int main(int argc, char** argv) {
             attention_layernorm,
             moai::openfhe::kPaperCompatHiddenSize);
 
+        const auto nonlinear_contracts =
+            moai::openfhe::MakePaperCompatNonlinearContracts();
+        RequireValuesInDeclaredRange(
+            softmax_denominator,
+            nonlinear_contracts.softmax_reciprocal.interval,
+            "Softmax denominator");
+        RequireValuesInDeclaredRange(
+            attention_layernorm_normalized_variance,
+            nonlinear_contracts.layernorm_inverse_sqrt.interval,
+            "attention LayerNorm normalized variance");
+        const auto softmax_denominator_sentinel_range =
+            MeasureInactiveSentinelRange(
+                softmax_denominator,
+                moai::openfhe::kPaperCompatHiddenSize,
+                "Softmax denominator inactive sentinel");
+        const auto attention_layernorm_sentinel_range =
+            MeasureInactiveSentinelRange(
+                attention_layernorm_normalized_variance,
+                moai::openfhe::kPaperCompatHiddenSize,
+                "attention LayerNorm inactive sentinel");
+        const double attention_layernorm_guard_deviation =
+            MeasureLayerNormInactiveGuardDeviation(
+                attention_layernorm_normalized_variance,
+                "attention LayerNorm normalized variance");
+
         QualityMetrics worst_intermediate_pre;
         QualityMetrics worst_intermediate_activation;
         QualityMetrics worst_output_contribution;
@@ -1030,8 +1308,28 @@ int main(int argc, char** argv) {
             checkpoints.output_residual_before_bootstrap);
         const auto output_residual_refreshed = client.Decrypt(
             checkpoints.output_residual_after_bootstrap);
+        const auto output_layernorm_normalized_variance = client.Decrypt(
+            checkpoints.output_layernorm_normalized_variance);
         const auto output = client.Decrypt(encrypted_result.output);
         const auto decrypt_end = Clock::now();
+
+        RequireValuesInDeclaredRange(
+            output_layernorm_normalized_variance,
+            nonlinear_contracts.layernorm_inverse_sqrt.interval,
+            "output LayerNorm normalized variance");
+        const auto output_layernorm_sentinel_range =
+            MeasureInactiveSentinelRange(
+                output_layernorm_normalized_variance,
+                moai::openfhe::kPaperCompatHiddenSize,
+                "output LayerNorm inactive sentinel");
+        const double output_layernorm_guard_deviation =
+            MeasureLayerNormInactiveGuardDeviation(
+                output_layernorm_normalized_variance,
+                "output LayerNorm normalized variance");
+        const double layernorm_inactive_guard_max_error =
+            std::max(
+                attention_layernorm_guard_deviation,
+                output_layernorm_guard_deviation);
 
         const auto output_projection_quality = MeasureQuality(
             output_projection,
@@ -1092,15 +1390,16 @@ int main(int argc, char** argv) {
         const auto& metrics = server.metrics();
         if (metrics.bootstraps != 25 || metrics.bootstrap_iterations != 50 ||
             metrics.rotations != 6300 ||
-            metrics.ct_pt_multiplications != 51865 ||
+            metrics.ct_pt_multiplications != 51885 ||
             metrics.ct_ct_multiplications != 95 ||
-            metrics.rescale_operations != 800 ||
+            metrics.rescale_operations != 810 ||
             metrics.chebyshev_evaluations != 55 ||
             metrics.estimated_polynomial_multiplications != 1150 ||
             metrics.multiplicative_depth != 47 ||
             metrics.max_polynomial_depth != 10 ||
-            encrypted_result.output.packing.level != 29 ||
-            server.RemainingLevels(encrypted_result.output) != 17 ||
+            encrypted_result.output.packing.level != 30 ||
+            encrypted_result.output.packing.noise_scale_degree != 2 ||
+            server.RemainingLevels(encrypted_result.output) != 16 ||
             metrics.max_observed_level != 45) {
             std::ostringstream message;
             message << "M4 operation/depth schedule drifted: rotations="
@@ -1250,6 +1549,23 @@ int main(int argc, char** argv) {
             << "\"relative_l2\":" << output_quality.relative_l2 << ','
             << "\"cosine\":" << output_quality.cosine << ','
             << "\"inactive_max_abs\":" << inactive_maximum << ','
+            << "\"inactive_polynomial_sentinel_ranges\":{"
+            << "\"softmax_denominator\":{\"minimum\":"
+            << softmax_denominator_sentinel_range.minimum
+            << ",\"maximum\":"
+            << softmax_denominator_sentinel_range.maximum << "},"
+            << "\"attention_layernorm_normalized_variance\":{"
+            << "\"minimum\":"
+            << attention_layernorm_sentinel_range.minimum
+            << ",\"maximum\":"
+            << attention_layernorm_sentinel_range.maximum << "},"
+            << "\"output_layernorm_normalized_variance\":{"
+            << "\"minimum\":"
+            << output_layernorm_sentinel_range.minimum
+            << ",\"maximum\":"
+            << output_layernorm_sentinel_range.maximum << "}},"
+            << "\"layernorm_inactive_guard_max_error\":"
+            << layernorm_inactive_guard_max_error << ','
             << "\"multiplicative_depth\":"
             << metrics.multiplicative_depth << ','
             << "\"max_observed_level\":"
@@ -1260,22 +1576,38 @@ int main(int argc, char** argv) {
         PrintArtifactCheckpoint(
             "attention_output",
             checkpoints.attention.output_before_bootstrap_cleanup,
-            server);
+            server,
+            40,
+            2,
+            6,
+            5);
         std::cout << ',';
         PrintArtifactCheckpoint(
             "self_layernorm_output",
             checkpoints.attention_layernorm,
-            server);
+            server,
+            32,
+            2,
+            14,
+            5);
         std::cout << ',';
         PrintArtifactCheckpoint(
             "ffn_output",
             checkpoints.output_projection,
-            server);
+            server,
+            45,
+            2,
+            1,
+            5);
         std::cout << ',';
         PrintArtifactCheckpoint(
             "encoder_output",
             encrypted_result.output,
-            server);
+            server,
+            30,
+            2,
+            16,
+            5);
         std::cout
             << "],\"operation_counts\":{"
             << "\"rotations\":" << metrics.rotations << ','

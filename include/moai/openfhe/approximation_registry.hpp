@@ -2,6 +2,7 @@
 
 #include "moai/openfhe/types.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -10,10 +11,21 @@
 namespace moai::openfhe {
 
 inline constexpr double kPaperCompatLayerNormEpsilon = 1e-12;
+// Generic M3 operator-smoke scales.  The fixed five-token FeaturePacked replay
+// uses PaperCompatLayerNormVarianceScales below and must not consume these.
 inline constexpr double kPaperCompatLayerNorm1VarianceScale = 64.0;
 inline constexpr double kPaperCompatLayerNorm2VarianceScale = 1.0;
+inline constexpr double kPaperCompatLayerNormBootstrapPreconditioner = 2048.0;
 inline constexpr std::size_t kPaperCompatEncoderLayers = 12;
 inline constexpr std::size_t kPaperCompatAttentionHeads = 12;
+inline constexpr std::size_t kPaperCompatLayerNormTraceTokens = 5;
+inline constexpr std::size_t kPaperCompatLayerNormHiddenSize = 768;
+inline constexpr std::size_t kPaperCompatLayerNormFeatureSlots = 1024;
+inline constexpr double kPaperCompatLayerNormScaleTarget = 64.0;
+inline constexpr const char* kPaperCompatLayerNormScaleContractId =
+    "layernorm_layer_token_power2_scale_v1";
+inline constexpr const char* kPaperCompatLayerNormScaleSha256 =
+    "9436f05ce80b427de47700d924869b0dd6f13cc515e586446fcd2dc56faec28a";
 inline constexpr const char* kPaperCompatSoftmaxShiftContractId =
     "softmax_shift_layer_head_logspace_midpoint_v1";
 inline constexpr const char* kPaperCompatSoftmaxShiftSha256 =
@@ -60,6 +72,14 @@ MakePaperCompatSoftmaxShiftContract();
 [[nodiscard]] double PaperCompatSoftmaxPublicShift(
     std::size_t layer,
     std::size_t head);
+
+// Offline-only powers of two derived from the bundled five-token trace.  The
+// selected layer and token positions are public replay metadata; deriving a
+// scale from a runtime activation is forbidden.
+[[nodiscard]] std::array<double, kPaperCompatLayerNormTraceTokens>
+PaperCompatLayerNormVarianceScales(
+    PaperCompatLayerNormSite site,
+    std::size_t layer);
 
 [[nodiscard]] std::string ComputeCoefficientSha256(
     const std::vector<double>& coefficients);

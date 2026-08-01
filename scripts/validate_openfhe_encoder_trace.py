@@ -12,8 +12,10 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -33,6 +35,23 @@ APPROXIMATION_PATH = REPO_ROOT / "config" / "openfhe_approximations.json"
 PASS_DECISION = "PASS_OPENFHE_ENCODER_TRACE_CONTRACT"
 FAIL_DECISION = "FAIL_OPENFHE_ENCODER_TRACE_CONTRACT"
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+FEATURE_PACKED_LAYERNORM_CONTRACT_ID = "layernorm_layer_token_power2_scale_v1"
+FEATURE_PACKED_LAYERNORM_CONTRACT_SHA256 = (
+    "b493b032e461e15d7436efe7fff5948436afa8e302646daa97db78fa1d59be3e"
+)
+FEATURE_PACKED_LAYERNORM_VALUES_SHA256 = (
+    "9436f05ce80b427de47700d924869b0dd6f13cc515e586446fcd2dc56faec28a"
+)
+FEATURE_PACKED_LAYERNORM_RAW_VARIANCE_SHA256 = (
+    "940f92de81915c2121b427b72827e4ed87d072fda0847266d0cb5521d60f93b6"
+)
+FEATURE_PACKED_LAYERNORM_SCALE_TARGET = 64.0
+FEATURE_PACKED_LAYERNORM_BOOTSTRAP_PRECONDITIONER = 2048.0
+FEATURE_PACKED_LAYERNORM_SHAPE = (2, 12, 5)
+FEATURE_PACKED_LAYERNORM_SITE_ORDER = ("ln1", "ln2")
+FEATURE_PACKED_LAYERNORM_SELECTION_FORMULA = (
+    "D=2^roundTiesToEven(log2(64/raw_population_variance))"
+)
 
 SCOPE = {
     "fixture_only": True,
@@ -414,6 +433,15 @@ def coefficient_sha256(values: np.ndarray) -> str:
     return tensor_sha256(values)
 
 
+def canonical_json(value: Any) -> str:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+
+
 def openfhe_chebyshev_coefficients(
     function: Callable[[float], float], lower: float, upper: float, degree: int
 ) -> np.ndarray:
@@ -489,12 +517,16 @@ def quality(actual: np.ndarray, expected: np.ndarray) -> dict[str, float]:
         raise ContractError("quality tensors must have nonzero norms")
     return {
         "relative_l2": delta_norm / expected_norm,
-        "cosine": float(np.vdot(actual_flat, expected_flat) / (actual_norm * expected_norm)),
+        "cosine": float(
+            np.vdot(actual_flat, expected_flat) / (actual_norm * expected_norm)
+        ),
         "max_absolute": float(np.max(np.abs(delta))),
     }
 
 
-def require_metric_gate(label: str, metrics: dict[str, float], gate: dict[str, float]) -> None:
+def require_metric_gate(
+    label: str, metrics: dict[str, float], gate: dict[str, float]
+) -> None:
     if (
         metrics["relative_l2"] > gate["relative_l2"]
         or metrics["cosine"] < gate["cosine"]
@@ -530,20 +562,27 @@ def polynomial_layernorm(
     weight: np.ndarray,
     bias: np.ndarray,
     epsilon: float,
-    variance_scale: float,
+    variance_scales: np.ndarray,
     inverse_sqrt_coefficients: np.ndarray,
     interval: list[float],
     range_label: str,
 ) -> tuple[np.ndarray, list[float]]:
+    scales = np.asarray(variance_scales, dtype=np.float64)
+    if values.shape[0] != 5 or scales.shape != (5,):
+        raise ContractError(
+            "FeaturePacked LayerNorm requires exactly five pre-registered "
+            "per-token variance scales"
+        )
+    if not np.isfinite(scales).all() or np.any(scales <= 0.0):
+        raise ContractError(
+            "FeaturePacked LayerNorm variance scales must be finite and positive"
+        )
     centered = values - np.mean(values, axis=-1, keepdims=True)
     variance = np.mean(centered * centered, axis=-1, keepdims=True) + epsilon
-    normalized_variance = variance_scale * variance
+    normalized_variance = scales[:, None] * variance
     observed = require_range(range_label, normalized_variance, interval)
-    inverse = math.sqrt(variance_scale) * evaluate_openfhe_chebyshev(
-        normalized_variance,
-        inverse_sqrt_coefficients,
-        interval[0],
-        interval[1],
+    inverse = np.sqrt(scales)[:, None] * evaluate_openfhe_chebyshev(
+        normalized_variance, inverse_sqrt_coefficients, interval[0], interval[1]
     )
     return weight * centered * inverse + bias, observed
 
@@ -564,11 +603,257 @@ def selected_polynomial(value: dict[str, Any]) -> dict[str, Any]:
     return selected
 
 
+def selected_feature_packed_layernorm_binding(
+    contract: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "contract_id": contract["contract_id"],
+        "contract_sha256": contract["contract_sha256"],
+        "shape": contract["shape"],
+        "axis_order": contract["axis_order"],
+        "site_order": contract["site_order"],
+        "layer_order": contract["layer_order"],
+        "token_order": contract["token_order"],
+        "scope": {
+            "non_generalizable": contract["scope"]["non_generalizable"],
+            "public_indices": contract["scope"]["public_indices"],
+            "runtime_activation_dependency": contract["scope"][
+                "runtime_activation_dependency"
+            ],
+        },
+        "epsilon": contract["epsilon"],
+        "selection": contract["selection"],
+        "values_sha256": contract["values_sha256"],
+        "raw_variance_sha256": contract["raw_variance_sha256"],
+        "bootstrap_preconditioner": contract["bootstrap_execution"]["preconditioner"],
+        "inactive_guard": contract["inactive_guard"],
+    }
+
+
+def validate_feature_packed_layernorm_contract(
+    contract: Any,
+    generic_layernorm_epsilon: Any,
+) -> np.ndarray:
+    value = require_exact_keys(
+        contract,
+        {
+            "status",
+            "contract_id",
+            "scope",
+            "shape",
+            "axis_order",
+            "site_order",
+            "layer_order",
+            "token_order",
+            "packing",
+            "epsilon",
+            "selection",
+            "values",
+            "values_sha256",
+            "values_sha256_encoding",
+            "raw_variance_sha256",
+            "raw_variance_sha256_encoding",
+            "raw_variance_observed_range",
+            "normalization_formula",
+            "normalized_variance_range",
+            "bootstrap_execution",
+            "inactive_guard",
+            "sites",
+            "trace_validation",
+            "contract_hash_encoding",
+            "contract_sha256",
+        },
+        "FeaturePacked LayerNorm trace-scale contract",
+    )
+    fixed_values = {
+        "status": "plaintext_trace_gate_passed",
+        "contract_id": FEATURE_PACKED_LAYERNORM_CONTRACT_ID,
+        "shape": list(FEATURE_PACKED_LAYERNORM_SHAPE),
+        "axis_order": ["site", "layer", "token"],
+        "site_order": list(FEATURE_PACKED_LAYERNORM_SITE_ORDER),
+        "layer_order": list(range(DIMENSIONS["encoder_layers"])),
+        "token_order": list(range(DIMENSIONS["trace_token_rows"])),
+        "packing": {
+            "hidden_features": DIMENSIONS["hidden_size"],
+            "feature_slots": 1024,
+            "trace_tokens": DIMENSIONS["trace_token_rows"],
+            "inactive_feature_slots": 256,
+        },
+        "scope": {
+            "workload": "fixed five-token 12-layer encoder trace replay only",
+            "non_generalizable": True,
+            "visibility": "public pre-registered workload metadata",
+            "public_indices": ["site", "layer", "token"],
+            "runtime_activation_dependency": "none",
+            "derivation_source": "bundled plaintext residual tensors, used offline only",
+            "forbidden": (
+                "deriving or selecting scales from runtime plaintext or "
+                "ciphertext activations, client-private inputs, or values "
+                "outside the registered site/layer/token trace coordinates"
+            ),
+        },
+        "epsilon": {
+            "value": 1e-12,
+            "placement": (
+                "population variance + epsilon before multiplication by the "
+                "selected D[site,layer,token]"
+            ),
+        },
+        "selection": {
+            "target": FEATURE_PACKED_LAYERNORM_SCALE_TARGET,
+            "formula": FEATURE_PACKED_LAYERNORM_SELECTION_FORMULA,
+            "rounding": "IEEE-style round ties to even",
+            "power_of_two_only": True,
+        },
+        "normalization_formula": {
+            "variance": "v=mean_i((x_i-mean(x))^2)+1e-12",
+            "polynomial_input": "u=D[site,layer,token]*v",
+            "inverse_standard_deviation": ("sqrt(D[site,layer,token])*ChebInvSqrt(u)"),
+            "sqrt_D_compensation": (
+                "fuse the per-site/layer/token sqrt(D) into public gamma"
+            ),
+            "output": ("gamma_i*(x_i-mean(x))*inverse_standard_deviation+beta_i"),
+        },
+        "bootstrap_execution": {
+            "placement": (
+                "after preconditioned normalized variance is formed, before "
+                "inverse sqrt"
+            ),
+            "preconditioner": FEATURE_PACKED_LAYERNORM_BOOTSTRAP_PRECONDITIONER,
+            "active_pre_bootstrap_value": "u/2048",
+            "inactive_pre_bootstrap_guard": "1/2048",
+            "post_bootstrap_restore": "multiply all 1024 slots uniformly by 2048",
+            "post_restore_active_semantics": "active slots approximate u",
+            "post_restore_inactive_semantics": (
+                "inactive slots are an interval-checked diagnostic guard near "
+                "one, not an exact identity assertion"
+            ),
+            "post_inverse_mask": (
+                "after inverse-sqrt evaluation, multiply by the public "
+                "first-768-active/last-256-zero mask and rescale before the "
+                "centered ciphertext-ciphertext product"
+            ),
+        },
+        "inactive_guard": {
+            "pre_bootstrap_value": "1/2048",
+            "post_restore_target": 1.0,
+            "validation": (
+                "finite and inside the inverse-sqrt hard interval; deviation "
+                "from one is diagnostic only"
+            ),
+            "exact_identity_gate": False,
+            "post_inverse_mask": (
+                "the public first-768-active/last-256-zero mask removes "
+                "inactive inverse-sqrt slots before the centered product"
+            ),
+        },
+        "values_sha256_encoding": (
+            "site-major ln1/ln2, then layer 0..11, then token 0..4; "
+            "raw IEEE-754 binary64 little-endian bytes"
+        ),
+        "raw_variance_sha256_encoding": (
+            "site-major ln1/ln2, then layer 0..11, then token 0..4; "
+            "raw IEEE-754 binary64 little-endian bytes"
+        ),
+        "contract_hash_encoding": (
+            "SHA-256 of canonical sorted-key compact JSON for this object, "
+            "excluding only contract_sha256"
+        ),
+    }
+    for key, expected in fixed_values.items():
+        if value[key] != expected:
+            raise ContractError(
+                f"FeaturePacked LayerNorm trace-scale contract {key} changed"
+            )
+    if (
+        type(generic_layernorm_epsilon) is not float
+        or generic_layernorm_epsilon != value["epsilon"]["value"]
+    ):
+        raise ContractError(
+            "FeaturePacked LayerNorm epsilon differs from the generic "
+            "LayerNorm approximation contract"
+        )
+
+    try:
+        scales = np.asarray(value["values"], dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise ContractError(
+            "FeaturePacked LayerNorm scale values are not a binary64 tensor"
+        ) from exc
+    if scales.shape != FEATURE_PACKED_LAYERNORM_SHAPE:
+        raise ContractError(
+            "FeaturePacked LayerNorm scale values shape changed: "
+            f"expected {FEATURE_PACKED_LAYERNORM_SHAPE}, got {scales.shape}"
+        )
+    fractions, _ = np.frexp(scales)
+    if (
+        not np.isfinite(scales).all()
+        or np.any(scales <= 0.0)
+        or not np.all(fractions == 0.5)
+    ):
+        raise ContractError(
+            "FeaturePacked LayerNorm scale values must be positive powers of two"
+        )
+    values_hash = tensor_sha256(scales)
+    if (
+        value["values_sha256"] != FEATURE_PACKED_LAYERNORM_VALUES_SHA256
+        or values_hash != value["values_sha256"]
+    ):
+        raise ContractError(
+            "FeaturePacked LayerNorm scale values matrix or SHA-256 changed"
+        )
+    if (
+        not isinstance(value["raw_variance_sha256"], str)
+        or SHA256_PATTERN.fullmatch(value["raw_variance_sha256"]) is None
+        or value["raw_variance_sha256"] != FEATURE_PACKED_LAYERNORM_RAW_VARIANCE_SHA256
+    ):
+        raise ContractError(
+            "FeaturePacked LayerNorm raw population-variance SHA-256 changed"
+        )
+    normalized_range = require_exact_keys(
+        value["normalized_variance_range"],
+        {"hard_interval", "observed_trace_range", "action_on_violation"},
+        "FeaturePacked LayerNorm normalized-variance range",
+    )
+    if (
+        normalized_range["hard_interval"]
+        != THRESHOLDS["hard_intervals"]["layernorm_normalized_variance"]
+    ):
+        raise ContractError(
+            "FeaturePacked LayerNorm normalized-variance hard interval changed"
+        )
+    if normalized_range["action_on_violation"] != (
+        "stop; do not clip or derive a runtime replacement scale"
+    ):
+        raise ContractError(
+            "FeaturePacked LayerNorm runtime scale-derivation policy changed"
+        )
+    try:
+        contract_payload = dict(value)
+        del contract_payload["contract_sha256"]
+        contract_hash = hashlib.sha256(
+            canonical_json(contract_payload).encode("utf-8")
+        ).hexdigest()
+    except (TypeError, ValueError) as exc:
+        raise ContractError(
+            "FeaturePacked LayerNorm contract is not canonical finite JSON"
+        ) from exc
+    if (
+        value["contract_sha256"] != FEATURE_PACKED_LAYERNORM_CONTRACT_SHA256
+        or contract_hash != value["contract_sha256"]
+    ):
+        raise ContractError(
+            "FeaturePacked LayerNorm contract matrix or contract SHA-256 changed"
+        )
+    return scales
+
+
 def extract_approximation_binding(source: dict[str, Any]) -> dict[str, Any]:
     try:
         operators = source["operators"]
         softmax = operators["softmax"]
         layernorm = operators["layernorm"]
+        feature_packed_layernorm = layernorm["feature_packed_trace_scale_contract"]
         shift = softmax["shift_contract"]
         return {
             "softmax_shift": {
@@ -587,12 +872,21 @@ def extract_approximation_binding(source: dict[str, Any]) -> dict[str, Any]:
             },
             "layernorm": {
                 "epsilon": layernorm["epsilon"]["value"],
-                "ln1_variance_scale_D_s": layernorm["sites"]["ln1"]["variance_scale_D_s"],
-                "ln2_variance_scale_D_s": layernorm["sites"]["ln2"]["variance_scale_D_s"],
+                "ln1_variance_scale_D_s": layernorm["sites"]["ln1"][
+                    "variance_scale_D_s"
+                ],
+                "ln2_variance_scale_D_s": layernorm["sites"]["ln2"][
+                    "variance_scale_D_s"
+                ],
+                "feature_packed_trace_scale_contract": (
+                    selected_feature_packed_layernorm_binding(feature_packed_layernorm)
+                ),
             },
         }
     except (KeyError, TypeError) as exc:
-        raise ContractError(f"approximation source is missing required fields: {exc}") from exc
+        raise ContractError(
+            f"approximation source is missing required fields: {exc}"
+        ) from exc
 
 
 def approximation_runtime(
@@ -600,13 +894,28 @@ def approximation_runtime(
 ) -> dict[str, Any]:
     extracted = extract_approximation_binding(source)
     if binding != extracted:
-        raise ContractError("approximation_binding differs from the bound approximation source")
+        raise ContractError(
+            "approximation_binding differs from the bound approximation source"
+        )
+    try:
+        layernorm = source["operators"]["layernorm"]
+        trace_scale_contract = layernorm["feature_packed_trace_scale_contract"]
+    except (KeyError, TypeError) as exc:
+        raise ContractError(
+            "approximation source is missing the FeaturePacked LayerNorm "
+            f"trace-scale contract: {exc}"
+        ) from exc
+    trace_scales = validate_feature_packed_layernorm_contract(
+        trace_scale_contract,
+        layernorm["epsilon"]["value"],
+    )
     shifts = np.asarray(
         source["operators"]["softmax"]["shift_contract"]["values"], dtype=np.float64
     )
-    if shifts.shape != (12, 12) or tensor_sha256(shifts) != binding["softmax_shift"][
-        "values_sha256"
-    ]:
+    if (
+        shifts.shape != (12, 12)
+        or tensor_sha256(shifts) != binding["softmax_shift"]["values_sha256"]
+    ):
         raise ContractError("softmax shift tensor shape or binary64 SHA-256 changed")
 
     functions: dict[str, Callable[[float], float]] = {
@@ -619,7 +928,10 @@ def approximation_runtime(
     for name, polynomial in binding["polynomials"].items():
         interval = polynomial["interval"]
         values = openfhe_chebyshev_coefficients(
-            functions[name], interval["minimum"], interval["maximum"], polynomial["degree"]
+            functions[name],
+            interval["minimum"],
+            interval["maximum"],
+            polynomial["degree"],
         )
         if name == "gelu":
             values = constrain_zero_at_origin(
@@ -634,7 +946,14 @@ def approximation_runtime(
                 f"{polynomial['coefficient_sha256']}, got {actual_hash}"
             )
         coefficients[name] = values
-    return {"shifts": shifts, "coefficients": coefficients}
+    return {
+        "shifts": shifts,
+        "coefficients": coefficients,
+        "feature_packed_layernorm_scales": trace_scales,
+        "feature_packed_layernorm_contract": binding["layernorm"][
+            "feature_packed_trace_scale_contract"
+        ],
+    }
 
 
 def extract_scale_layers(source: dict[str, Any]) -> list[dict[str, Any]]:
@@ -663,8 +982,13 @@ def validate_scales(layer: dict[str, Any], expected: dict[str, Any]) -> np.ndarr
         raise ContractError("layer scale id differs from source")
     for key in ("channel_scale_default", "channel_scale_overrides"):
         if layer[key] != expected[key]:
-            raise ContractError(f"layer {layer['layer_id']} {key} differs from scale source")
-    if type(layer["channel_scale_default"]) is not int or layer["channel_scale_default"] != 1:
+            raise ContractError(
+                f"layer {layer['layer_id']} {key} differs from scale source"
+            )
+    if (
+        type(layer["channel_scale_default"]) is not int
+        or layer["channel_scale_default"] != 1
+    ):
         raise ContractError("channel_scale_default must be integer one")
     scales = np.ones(3072, dtype=np.float64)
     overrides = layer["channel_scale_overrides"]
@@ -706,7 +1030,9 @@ def load_layer(
         try:
             values = np.loadtxt(path, delimiter=",", dtype=np.float64)
         except (OSError, ValueError) as exc:
-            raise ContractError(f"layer {layer_id}: cannot parse {spec['path']}: {exc}") from exc
+            raise ContractError(
+                f"layer {layer_id}: cannot parse {spec['path']}: {exc}"
+            ) from exc
         expected_shape = tuple(spec["shape"])
         if values.shape != expected_shape:
             raise ContractError(
@@ -729,7 +1055,9 @@ def layer_scales(layer: dict[str, Any]) -> np.ndarray:
     return scales
 
 
-def static_relations(arrays: dict[str, np.ndarray], scales: np.ndarray) -> dict[str, Any]:
+def static_relations(
+    arrays: dict[str, np.ndarray], scales: np.ndarray
+) -> dict[str, Any]:
     embedded = arrays["embedded_inputs"]
     query = embedded @ arrays["query_weight"].T + arrays["query_bias"]
     key = embedded @ arrays["key_weight"].T + arrays["key_bias"]
@@ -758,9 +1086,10 @@ def static_relations(arrays: dict[str, np.ndarray], scales: np.ndarray) -> dict[
     intermediate = arrays["intermediate_inputs"] @ arrays["intermediate_weight"].T
     intermediate = (intermediate + arrays["intermediate_bias"]) * scales
     gelu = exact_gelu(arrays["intermediate_after_linear"])
-    final = arrays["intermediate_output"] @ (
-        arrays["final_dense_weight"] / scales[np.newaxis, :]
-    ).T
+    final = (
+        arrays["intermediate_output"]
+        @ (arrays["final_dense_weight"] / scales[np.newaxis, :]).T
+    )
     final += arrays["final_dense_bias"]
     final_before_ln = arrays["final_after_linear"] + arrays["final_residual_operand"]
     final_ln = exact_layernorm(
@@ -791,7 +1120,10 @@ def static_relations(arrays: dict[str, np.ndarray], scales: np.ndarray) -> dict[
         "final_residual": (final_before_ln, arrays["final_before_layernorm"]),
         "final_layernorm_exact": (final_ln, arrays["final_output"]),
     }
-    metrics = {name: quality(actual, expected) for name, (actual, expected) in comparisons.items()}
+    metrics = {
+        name: quality(actual, expected)
+        for name, (actual, expected) in comparisons.items()
+    }
     for name, value in metrics.items():
         require_metric_gate(f"static {name}", value, TRACE_RELATION_THRESHOLDS[name])
     return metrics
@@ -810,9 +1142,10 @@ def chained_layer(
     query = values @ arrays["query_weight"].T + arrays["query_bias"]
     key = values @ arrays["key_weight"].T + arrays["key_bias"]
     projected_value = values @ arrays["value_weight"].T + arrays["value_bias"]
-    qkt = np.einsum(
-        "qhd,khd->qhk", query.reshape(5, 12, 64), key.reshape(5, 12, 64)
-    ) / 8.0
+    qkt = (
+        np.einsum("qhd,khd->qhk", query.reshape(5, 12, 64), key.reshape(5, 12, 64))
+        / 8.0
+    )
     shifted = qkt - approximation["shifts"][layer_id][None, :, None]
     shifted_range = require_range(
         f"layer {layer_id} softmax shifted logits",
@@ -847,12 +1180,13 @@ def chained_layer(
     self_before_ln = self_linear + values
     inverse_sqrt = polynomials["inverse_sqrt"]
     layernorm = binding["layernorm"]
+    registered_trace_scales = approximation["feature_packed_layernorm_scales"]
     self_output, ln1_range = polynomial_layernorm(
         self_before_ln,
         arrays["self_layernorm_weight"],
         arrays["self_layernorm_bias"],
         layernorm["epsilon"],
-        layernorm["ln1_variance_scale_D_s"],
+        registered_trace_scales[0, layer_id, :],
         coefficients["inverse_sqrt"],
         [inverse_sqrt["interval"]["minimum"], inverse_sqrt["interval"]["maximum"]],
         f"layer {layer_id} LN1 normalized variance",
@@ -871,9 +1205,7 @@ def chained_layer(
         gelu_polynomial["interval"]["minimum"],
         gelu_polynomial["interval"]["maximum"],
     )
-    final_linear = activated @ (
-        arrays["final_dense_weight"] / scales[np.newaxis, :]
-    ).T
+    final_linear = activated @ (arrays["final_dense_weight"] / scales[np.newaxis, :]).T
     final_linear += arrays["final_dense_bias"]
     final_before_ln = final_linear + self_output
     output, ln2_range = polynomial_layernorm(
@@ -881,7 +1213,7 @@ def chained_layer(
         arrays["final_layernorm_weight"],
         arrays["final_layernorm_bias"],
         layernorm["epsilon"],
-        layernorm["ln2_variance_scale_D_s"],
+        registered_trace_scales[1, layer_id, :],
         coefficients["inverse_sqrt"],
         [inverse_sqrt["interval"]["minimum"], inverse_sqrt["interval"]["maximum"]],
         f"layer {layer_id} LN2 normalized variance",
@@ -896,7 +1228,7 @@ def chained_layer(
 
 
 def aggregate_relation_metrics(
-    per_layer: list[dict[str, Any]]
+    per_layer: list[dict[str, Any]],
 ) -> dict[str, dict[str, float]]:
     result: dict[str, dict[str, float]] = {}
     for name in TRACE_RELATION_THRESHOLDS:
@@ -920,6 +1252,75 @@ def aggregate_ranges(per_layer: list[dict[str, Any]]) -> dict[str, list[float]]:
     }
 
 
+def offline_feature_packed_layernorm_scale(
+    raw_population_variance: float,
+) -> float:
+    if not math.isfinite(raw_population_variance) or raw_population_variance <= 0.0:
+        raise ContractError(
+            "static FeaturePacked LayerNorm raw population variance must be "
+            "finite and positive"
+        )
+    exponent = round(
+        math.log2(FEATURE_PACKED_LAYERNORM_SCALE_TARGET / raw_population_variance)
+    )
+    return math.ldexp(1.0, exponent)
+
+
+def validate_static_layernorm_trace_scales(
+    raw_variances: np.ndarray,
+    approximation: dict[str, Any],
+) -> dict[str, Any]:
+    if raw_variances.shape != FEATURE_PACKED_LAYERNORM_SHAPE:
+        raise ContractError("static FeaturePacked LayerNorm raw-variance shape changed")
+    if not np.isfinite(raw_variances).all() or np.any(raw_variances <= 0.0):
+        raise ContractError(
+            "static FeaturePacked LayerNorm raw variances must be finite and positive"
+        )
+    contract = approximation["feature_packed_layernorm_contract"]
+    raw_hash = tensor_sha256(raw_variances)
+    if raw_hash != contract["raw_variance_sha256"]:
+        raise ContractError(
+            "static residual CSV population-variance SHA-256 changed: "
+            f"expected {contract['raw_variance_sha256']}, got {raw_hash}"
+        )
+    selected_scales = np.fromiter(
+        (
+            offline_feature_packed_layernorm_scale(float(raw_variance))
+            for raw_variance in raw_variances.flat
+        ),
+        dtype=np.float64,
+        count=raw_variances.size,
+    ).reshape(FEATURE_PACKED_LAYERNORM_SHAPE)
+    registered_scales = approximation["feature_packed_layernorm_scales"]
+    if not np.array_equal(selected_scales, registered_scales):
+        differing = np.argwhere(selected_scales != registered_scales)
+        coordinate = tuple(int(index) for index in differing[0])
+        raise ContractError(
+            "static residual CSV scale selection differs from the "
+            "pre-registered [site,layer,token] matrix at "
+            f"{coordinate}: selected={selected_scales[coordinate]}, "
+            f"registered={registered_scales[coordinate]}"
+        )
+    selected_hash = tensor_sha256(selected_scales)
+    if selected_hash != contract["values_sha256"]:
+        raise ContractError(
+            "static residual CSV selected-scale SHA-256 changed: "
+            f"expected {contract['values_sha256']}, got {selected_hash}"
+        )
+    return {
+        "source": (
+            "registered self_before_layernorm/final_before_layernorm residual CSVs only"
+        ),
+        "raw_population_variance_shape": list(raw_variances.shape),
+        "raw_population_variance_sha256": raw_hash,
+        "selection_formula": FEATURE_PACKED_LAYERNORM_SELECTION_FORMULA,
+        "selected_scale_values_sha256": selected_hash,
+        "registered_matrix_exact_match": True,
+        "runtime_activation_dependency": "none",
+        "passed": True,
+    }
+
+
 def run_trace(
     data_root: Path,
     layers: list[dict[str, Any]],
@@ -935,23 +1336,41 @@ def run_trace(
     previous_output_digest: str | None = None
     first_token_digest: str | None = None
     chained_values: np.ndarray | None = None
+    static_layernorm_raw_variances = np.empty(
+        FEATURE_PACKED_LAYERNORM_SHAPE,
+        dtype=np.float64,
+    )
     for layer_id, layer in enumerate(layers):
         arrays, digests = load_layer(data_root, layer, verify_hashes)
         observed_hashes.append(digests)
         if digests["embedded_inputs"] != digests["self_residual_operand"]:
-            raise ContractError(f"layer {layer_id}: attention residual is not byte-identical")
+            raise ContractError(
+                f"layer {layer_id}: attention residual is not byte-identical"
+            )
         if digests["intermediate_inputs"] != digests["final_residual_operand"]:
             raise ContractError(f"layer {layer_id}: FFN residual is not byte-identical")
-        if previous_output_digest is not None and previous_output_digest != digests[
-            "embedded_inputs"
-        ]:
-            raise ContractError(f"layer {layer_id - 1}->{layer_id}: chain is not byte-identical")
+        if (
+            previous_output_digest is not None
+            and previous_output_digest != digests["embedded_inputs"]
+        ):
+            raise ContractError(
+                f"layer {layer_id - 1}->{layer_id}: chain is not byte-identical"
+            )
         previous_output_digest = digests["final_output"]
         if first_token_digest is None:
             first_token_digest = digests["token_ids"]
         elif first_token_digest != digests["token_ids"]:
             raise ContractError(f"layer {layer_id}: token-id bytes differ from layer 0")
 
+        for site_index, file_id in enumerate(
+            ("self_before_layernorm", "final_before_layernorm")
+        ):
+            residual = arrays[file_id]
+            centered_residual = residual - np.mean(residual, axis=1, keepdims=True)
+            static_layernorm_raw_variances[site_index, layer_id, :] = np.mean(
+                centered_residual * centered_residual,
+                axis=1,
+            )
         scales = layer_scales(layer)
         relations = static_relations(arrays, scales)
         static_layers.append({"layer_id": layer_id, "relations": relations})
@@ -966,11 +1385,17 @@ def run_trace(
             metrics,
             THRESHOLDS["chained_polynomial_oracle_per_layer"],
         )
-        chained_layers.append({"layer_id": layer_id, "metrics": metrics, "ranges": ranges})
+        chained_layers.append(
+            {"layer_id": layer_id, "metrics": metrics, "ranges": ranges}
+        )
         del arrays
 
     if chained_values is None:
         raise ContractError("no encoder layers were processed")
+    trace_scale_summary = validate_static_layernorm_trace_scales(
+        static_layernorm_raw_variances,
+        approximation,
+    )
     final_metrics = chained_layers[-1]["metrics"]
     require_metric_gate(
         "12-layer chained polynomial oracle",
@@ -986,17 +1411,36 @@ def run_trace(
             "cross_layer": 11,
             "token_ids_across_layers": 11,
         },
+        "feature_packed_layernorm_scale_registry": trace_scale_summary,
         "aggregates": aggregate_relation_metrics(static_layers),
         "per_layer": static_layers,
         "passed": True,
     }
     chained_summary = {
         "oracle": "frozen OpenFHE-order Chebyshev plaintext replay",
+        "feature_packed_layernorm_scale_selection": {
+            "contract_id": approximation["feature_packed_layernorm_contract"][
+                "contract_id"
+            ],
+            "contract_sha256": approximation["feature_packed_layernorm_contract"][
+                "contract_sha256"
+            ],
+            "coordinate_order": ["site", "layer", "token"],
+            "selection": (
+                "pre-registered public coordinate lookup only; chained "
+                "activations are never inspected to select D"
+            ),
+            "runtime_activation_dependency": "none",
+        },
         "per_layer_gate": THRESHOLDS["chained_polynomial_oracle_per_layer"],
         "final_gate": THRESHOLDS["chained_polynomial_oracle_final"],
-        "worst_relative_l2": max(item["metrics"]["relative_l2"] for item in chained_layers),
+        "worst_relative_l2": max(
+            item["metrics"]["relative_l2"] for item in chained_layers
+        ),
         "minimum_cosine": min(item["metrics"]["cosine"] for item in chained_layers),
-        "maximum_absolute": max(item["metrics"]["max_absolute"] for item in chained_layers),
+        "maximum_absolute": max(
+            item["metrics"]["max_absolute"] for item in chained_layers
+        ),
         "observed_ranges": aggregate_ranges(chained_layers),
         "per_layer": chained_layers,
         "final": {"layer_id": 11, **final_metrics},
@@ -1078,7 +1522,9 @@ def validate_source_entry(
 
 
 def validate_manifest_structure(
-    manifest: dict[str, Any], scale_source: dict[str, Any], approximation_source: dict[str, Any]
+    manifest: dict[str, Any],
+    scale_source: dict[str, Any],
+    approximation_source: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     require_exact_keys(manifest, TOP_LEVEL_KEYS, "manifest")
     fixed = {
@@ -1095,7 +1541,9 @@ def validate_manifest_structure(
     }
     for key, expected in fixed.items():
         if manifest[key] != expected:
-            raise ContractError(f"manifest.{key} differs from the locked validator contract")
+            raise ContractError(
+                f"manifest.{key} differs from the locked validator contract"
+            )
     sources = require_exact_keys(
         manifest["sources"], {"channel_scales", "approximations"}, "sources"
     )
@@ -1126,9 +1574,13 @@ def validate_manifest_structure(
             f"layers[{layer_id}]",
         )
         if type(value["layer_id"]) is not int or value["layer_id"] != layer_id:
-            raise ContractError(f"layers[{layer_id}].layer_id must be integer {layer_id}")
+            raise ContractError(
+                f"layers[{layer_id}].layer_id must be integer {layer_id}"
+            )
         validate_scales(value, scale_layers[layer_id])
-        hashes = require_exact_keys(value["sha256"], set(FILE_SPECS), f"layers[{layer_id}].sha256")
+        hashes = require_exact_keys(
+            value["sha256"], set(FILE_SPECS), f"layers[{layer_id}].sha256"
+        )
         for file_id, digest in hashes.items():
             if not isinstance(digest, str) or SHA256_PATTERN.fullmatch(digest) is None:
                 raise ContractError(f"layer {layer_id}: invalid SHA-256 for {file_id}")
@@ -1143,7 +1595,9 @@ def compare_frozen(actual: Any, expected: Any, label: str) -> None:
     """Compare summaries while allowing only last-bit BLAS variation."""
     if isinstance(expected, bool) or expected is None or isinstance(expected, str):
         if actual != expected:
-            raise ContractError(f"{label} changed: expected {expected!r}, got {actual!r}")
+            raise ContractError(
+                f"{label} changed: expected {expected!r}, got {actual!r}"
+            )
         return
     if isinstance(expected, (int, float)) and not isinstance(expected, bool):
         if not isinstance(actual, (int, float)) or isinstance(actual, bool):
@@ -1176,8 +1630,12 @@ def validate_contract(data_root: Path, manifest: dict[str, Any]) -> dict[str, An
     static_summary, chained_summary, _ = run_trace(
         data_root, layers, approximation, binding, verify_hashes=True
     )
-    compare_frozen(static_summary, manifest["static_trace_summary"], "static_trace_summary")
-    compare_frozen(chained_summary, manifest["chained_oracle_summary"], "chained_oracle_summary")
+    compare_frozen(
+        static_summary, manifest["static_trace_summary"], "static_trace_summary"
+    )
+    compare_frozen(
+        chained_summary, manifest["chained_oracle_summary"], "chained_oracle_summary"
+    )
     return {"static": static_summary, "chained": chained_summary}
 
 
@@ -1197,6 +1655,50 @@ def print_report(report: dict[str, Any]) -> None:
     print(f"validated_files={report['static']['file_count']}")
 
 
+def write_manifest_atomic(path: Path, manifest: dict[str, Any]) -> Path:
+    if path.is_symlink():
+        raise ContractError(f"refusing to replace a symlink: {path}")
+    target = path.resolve(strict=False)
+    repository = REPO_ROOT.resolve()
+    if target != repository and repository not in target.parents:
+        raise ContractError(
+            f"generated manifest output must stay inside the MOAI repository: {target}"
+        )
+    if not target.parent.is_dir():
+        raise ContractError(
+            f"generated manifest parent directory does not exist: {target.parent}"
+        )
+    if target.exists() and not target.is_file():
+        raise ContractError(
+            f"generated manifest target is not a regular file: {target}"
+        )
+    mode = target.stat().st_mode & 0o777 if target.exists() else 0o644
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=target.parent,
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        os.fchmod(descriptor, mode)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(
+                manifest,
+                stream,
+                sort_keys=True,
+                indent=2,
+                allow_nan=False,
+            )
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, target)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    return target
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Validate/freeze the full MOAI five-token 12-layer encoder trace."
@@ -1210,7 +1712,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--emit-config",
         action="store_true",
-        help="emit a newly measured contract to stdout; never writes files",
+        help="emit a newly measured contract to stdout or the explicit --output path",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help=(
+            "atomically write --emit-config output inside the MOAI repository; "
+            "refuses symlinks and non-regular targets"
+        ),
     )
     return parser.parse_args(argv)
 
@@ -1218,17 +1728,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        if args.output is not None and not args.emit_config:
+            raise ContractError("--output requires --emit-config")
         if args.emit_config:
             manifest = build_manifest(args.data_root)
-            json.dump(manifest, sys.stdout, sort_keys=True, indent=2, allow_nan=False)
-            sys.stdout.write("\n")
+            if args.output is None:
+                json.dump(
+                    manifest,
+                    sys.stdout,
+                    sort_keys=True,
+                    indent=2,
+                    allow_nan=False,
+                )
+                sys.stdout.write("\n")
+            else:
+                output = write_manifest_atomic(args.output, manifest)
+                print(f"wrote_manifest={output}")
             return 0
         manifest = load_json(args.manifest)
         report = validate_contract(args.data_root, manifest)
         print_report(report)
         print(f"DECISION={PASS_DECISION}")
         return 0
-    except (ContractError, KeyError, TypeError, ValueError) as exc:
+    except (ContractError, KeyError, OSError, TypeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         print(f"DECISION={FAIL_DECISION}", file=sys.stderr)
         return 1

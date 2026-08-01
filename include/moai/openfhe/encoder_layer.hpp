@@ -17,6 +17,9 @@ inline constexpr std::size_t kPaperCompatHiddenSize = 768;
 inline constexpr std::size_t kPaperCompatIntermediateSize = 3072;
 inline constexpr std::size_t kPaperCompatIntermediateBlocks = 3;
 inline constexpr std::size_t kPaperCompatAffineBabyStep = 32;
+static_assert(kPaperCompatFeatureBlock == kPaperCompatLayerNormFeatureSlots);
+static_assert(kPaperCompatTraceTokens == kPaperCompatLayerNormTraceTokens);
+static_assert(kPaperCompatHiddenSize == kPaperCompatLayerNormHiddenSize);
 
 // Public model parameters are input-major. The three FFN blocks are already
 // bound to the frozen five-token channel-scale contract: W1 and b1 are

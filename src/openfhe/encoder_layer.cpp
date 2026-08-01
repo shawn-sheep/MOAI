@@ -304,7 +304,8 @@ EncoderLayerResult FeaturePackedEncoderLayer::Evaluate(
         checkpoints.attention_residual,
         weights.attention_layernorm_gamma,
         weights.attention_layernorm_beta,
-        PaperCompatLayerNormSite::kAttentionResidual);
+        PaperCompatLayerNormSite::kAttentionResidual,
+        weights.layer_index);
     checkpoints.attention_layernorm_normalized_variance =
         std::move(attention_layernorm.normalized_variance);
     checkpoints.attention_layernorm = std::move(attention_layernorm.output);
@@ -374,7 +375,8 @@ EncoderLayerResult FeaturePackedEncoderLayer::Evaluate(
         checkpoints.output_residual_after_bootstrap,
         weights.output_layernorm_gamma,
         weights.output_layernorm_beta,
-        PaperCompatLayerNormSite::kFeedForwardResidual);
+        PaperCompatLayerNormSite::kFeedForwardResidual,
+        weights.layer_index);
     checkpoints.output_layernorm_normalized_variance =
         std::move(output_layernorm.normalized_variance);
     checkpoints.output_layernorm = std::move(output_layernorm.output);

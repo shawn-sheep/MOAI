@@ -41,7 +41,12 @@ constexpr double kDoubleScaleBits = 100.0;
 constexpr double kScaleBitsTolerance = 1e-3;
 constexpr double kPerLayerRelativeL2Maximum = 5e-2;
 constexpr double kPerLayerCosineMinimum = 0.99;
-constexpr double kInactiveMaximum = 1e-6;
+constexpr double kStrictInactiveMaximum = 1e-6;
+// M5 prototype-only hygiene gate. Legacy MOAI does not assert inactive slots;
+// the user-authorized 1e-3 bound is therefore stricter than legacy
+// observability but is not a claim that MOAI used this threshold. M2/M3/M4
+// retain their independent 1e-6 gates.
+constexpr double kM5PrototypeInactiveMaximum = 1e-3;
 constexpr uint32_t kMetadataMultiplicativeDepth = 47;
 constexpr std::size_t kInactiveZeroCheckpointCount = 28;
 
@@ -106,6 +111,13 @@ struct OperationCounts {
     }
 };
 
+constexpr OperationCounts kExpectedEncoderLayerCounts{
+    6300, 51885, 95, 810, 55, 1150, 25, 50};
+constexpr OperationCounts kExpectedInterLayerRefreshCounts{
+    0, 5, 0, 5, 0, 0, 5, 10};
+constexpr OperationCounts kExpectedTwoLayerCumulativeCounts{
+    12600, 103775, 190, 1625, 110, 2300, 55, 110};
+
 struct TensorMetadata {
     uint32_t level{0};
     uint32_t noise_scale_degree{0};
@@ -141,8 +153,10 @@ constexpr TensorMetadata kLayer0InputMetadata{
     29, 1, 18, kSingleScaleBits, kSingleScaleBits, 5};
 constexpr TensorMetadata kLayerHandoffInputMetadata{
     19, 2, 27, kDoubleScaleBits, kDoubleScaleBits, 5};
-constexpr TensorMetadata kPolynomialCheckpointMetadata{
+constexpr TensorMetadata kSoftmaxCheckpointMetadata{
     18, 2, 28, kDoubleScaleBits, kDoubleScaleBits, 5};
+constexpr TensorMetadata kLayerNormCheckpointMetadata{
+    19, 2, 27, kDoubleScaleBits, kDoubleScaleBits, 5};
 constexpr TensorMetadata kLayer0AttentionOutputMetadata{
     40, 2, 6, kDoubleScaleBits, kDoubleScaleBits, 5};
 constexpr TensorMetadata kLaterLayerAttentionOutputMetadata{
@@ -150,13 +164,15 @@ constexpr TensorMetadata kLaterLayerAttentionOutputMetadata{
 constexpr TensorMetadata kLayer0LayerNorm1OutputMetadata{
     32, 2, 14, kDoubleScaleBits, kDoubleScaleBits, 5};
 constexpr TensorMetadata kLaterLayerNorm1OutputMetadata{
-    29, 2, 17, kDoubleScaleBits, kDoubleScaleBits, 5};
+    30, 2, 16, kDoubleScaleBits, kDoubleScaleBits, 5};
 constexpr TensorMetadata kLayer0FeedForwardOutputMetadata{
     45, 2, 1, kDoubleScaleBits, kDoubleScaleBits, 5};
 constexpr TensorMetadata kLaterLayerFeedForwardOutputMetadata{
-    42, 2, 4, kDoubleScaleBits, kDoubleScaleBits, 5};
-constexpr TensorMetadata kEncoderRawOutputMetadata{
-    29, 2, 17, kDoubleScaleBits, kDoubleScaleBits, 5};
+    43, 2, 3, kDoubleScaleBits, kDoubleScaleBits, 5};
+constexpr TensorMetadata kLayer0EncoderRawOutputMetadata{
+    30, 2, 16, kDoubleScaleBits, kDoubleScaleBits, 5};
+constexpr TensorMetadata kLaterLayerEncoderRawOutputMetadata{
+    30, 2, 16, kDoubleScaleBits, kDoubleScaleBits, 5};
 
 struct EncryptedRanges {
     ObservedRange softmax_shifted_logits;
@@ -340,6 +356,64 @@ RunKind ResolveRunKind(const Arguments& arguments) {
         : RunKind::kExactPrefix;
 }
 
+double InactiveMaximumForRun(
+    RunKind run_kind,
+    std::size_t evaluated_layer_count) {
+    const bool exact_three = run_kind == RunKind::kExactPrefix &&
+        evaluated_layer_count == 3;
+    const bool full_twelve = run_kind == RunKind::kFormalFull &&
+        evaluated_layer_count == moai::openfhe::kPaperCompatEncoderLayers;
+    return exact_three || full_twelve
+        ? kM5PrototypeInactiveMaximum
+        : kStrictInactiveMaximum;
+}
+
+void ValidateInactiveMaximumPolicyContract() {
+    const auto require = [](double actual, double expected, const char* label) {
+        if (actual != expected) {
+            throw std::runtime_error(
+                std::string("inactive gate scope drifted for ") + label);
+        }
+    };
+    require(
+        InactiveMaximumForRun(RunKind::kFormalFull, 12),
+        kM5PrototypeInactiveMaximum,
+        "formal full-12");
+    require(
+        InactiveMaximumForRun(RunKind::kExactPrefix, 3),
+        kM5PrototypeInactiveMaximum,
+        "exact-three");
+    require(
+        InactiveMaximumForRun(RunKind::kExactPrefix, 2),
+        kStrictInactiveMaximum,
+        "exact-two");
+    require(
+        InactiveMaximumForRun(RunKind::kExactPrefix, 4),
+        kStrictInactiveMaximum,
+        "exact-four");
+    require(
+        InactiveMaximumForRun(RunKind::kMetadataCalibration, 3),
+        kStrictInactiveMaximum,
+        "metadata calibration");
+}
+
+bool FormalScheduleSealedForCompletedRun(
+    RunKind run_kind,
+    std::size_t evaluated_layer_count) {
+    switch (run_kind) {
+        case RunKind::kFormalFull:
+            return evaluated_layer_count ==
+                moai::openfhe::kPaperCompatEncoderLayers;
+        case RunKind::kExactPrefix:
+            return evaluated_layer_count >= 3 &&
+                evaluated_layer_count <
+                    moai::openfhe::kPaperCompatEncoderLayers;
+        case RunKind::kMetadataCalibration:
+            return false;
+    }
+    throw std::runtime_error("unknown run kind for schedule-sealing status");
+}
+
 const char* LayerTestName(RunKind run_kind) {
     switch (run_kind) {
         case RunKind::kFormalFull:
@@ -468,8 +542,59 @@ double MaximumInactiveDeviation(
     return maximum;
 }
 
-double MaximumInactive(const PlainMatrix& values, std::size_t active_features) {
-    return MaximumInactiveDeviation(values, active_features, 0.0);
+struct LocatedInactiveMaximum {
+    double value{0.0};
+    std::size_t row{0};
+    std::size_t slot{0};
+};
+
+LocatedInactiveMaximum LocateMaximumInactive(
+    const PlainMatrix& values,
+    std::size_t active_features) {
+    LocatedInactiveMaximum located;
+    for (std::size_t row = 0; row < values.size(); ++row) {
+        if (values[row].size() != moai::openfhe::kPaperCompatFeatureBlock ||
+            active_features > values[row].size()) {
+            throw std::runtime_error("inactive checkpoint width changed");
+        }
+        for (std::size_t slot = active_features;
+             slot < values[row].size();
+             ++slot) {
+            if (!std::isfinite(values[row][slot])) {
+                throw std::runtime_error(
+                    "inactive checkpoint contains NaN or Inf");
+            }
+            const double candidate = std::abs(values[row][slot]);
+            if (candidate > located.value) {
+                located = {candidate, row, slot};
+            }
+        }
+    }
+    return located;
+}
+
+void RequireLayerNormInactiveGuardInRange(
+    const PlainMatrix& values,
+    const moai::openfhe::DeclaredRange& interval,
+    const std::string& label) {
+    if (values.empty() || !std::isfinite(interval.minimum) ||
+        !std::isfinite(interval.maximum) || interval.minimum >= interval.maximum) {
+        throw std::runtime_error(label + " has an invalid interval contract");
+    }
+    for (const auto& row : values) {
+        if (row.size() != moai::openfhe::kPaperCompatFeatureBlock) {
+            throw std::runtime_error(label + " width changed");
+        }
+        for (std::size_t slot = moai::openfhe::kPaperCompatHiddenSize;
+             slot < row.size();
+             ++slot) {
+            if (!std::isfinite(row[slot]) || row[slot] < interval.minimum ||
+                row[slot] > interval.maximum) {
+                throw std::runtime_error(
+                    label + " inactive guard escaped interval");
+            }
+        }
+    }
 }
 
 const std::vector<std::string>& ExpectedInactiveZeroCheckpointLabels() {
@@ -582,9 +707,13 @@ public:
                 "duplicate inactive checkpoint label: " + label);
         }
         observed_labels_.push_back(label);
-        maximum_ = std::max(
-            maximum_,
-            MaximumInactive(values, active_features));
+        const auto located = LocateMaximumInactive(values, active_features);
+        if (located.value > maximum_) {
+            maximum_ = located.value;
+            maximum_label_ = label;
+            maximum_row_ = located.row;
+            maximum_slot_ = located.slot;
+        }
     }
 
     [[nodiscard]] double Finish() const {
@@ -596,9 +725,24 @@ public:
         return observed_labels_.size();
     }
 
+    [[nodiscard]] const std::string& maximum_label() const noexcept {
+        return maximum_label_;
+    }
+
+    [[nodiscard]] std::size_t maximum_row() const noexcept {
+        return maximum_row_;
+    }
+
+    [[nodiscard]] std::size_t maximum_slot() const noexcept {
+        return maximum_slot_;
+    }
+
 private:
     std::vector<std::string> observed_labels_;
     double maximum_{0.0};
+    std::string maximum_label_;
+    std::size_t maximum_row_{0};
+    std::size_t maximum_slot_{0};
 };
 
 OperationCounts Counts(const RunMetrics& metrics) {
@@ -698,6 +842,13 @@ void RequireCounts(
         message << label << " operation-count contract drifted";
         throw std::runtime_error(message.str());
     }
+}
+
+void RequireCalibrationLayerCounts(const OperationCounts& counts) {
+    RequireCounts(
+        counts,
+        kExpectedEncoderLayerCounts,
+        "metadata calibration encoder layer");
 }
 
 TensorMetadata InspectTensor(
@@ -810,11 +961,20 @@ const TensorMetadata& ExpectedFeedForwardOutputMetadata(std::size_t layer) {
         : kLaterLayerFeedForwardOutputMetadata;
 }
 
+const TensorMetadata& ExpectedEncoderRawOutputMetadata(std::size_t layer) {
+    if (layer >= moai::openfhe::kPaperCompatEncoderLayers) {
+        throw std::runtime_error("raw-output metadata layer is out of range");
+    }
+    return layer == 0
+        ? kLayer0EncoderRawOutputMetadata
+        : kLaterLayerEncoderRawOutputMetadata;
+}
+
 uint32_t ExpectedLayerNorm1UsedLevelDelta(std::size_t layer) {
     if (layer >= moai::openfhe::kPaperCompatEncoderLayers) {
         throw std::runtime_error("LN1 metadata delta layer is out of range");
     }
-    return layer == 0 ? 14 : 11;
+    return layer == 0 ? 13 : 11;
 }
 
 void RequireMetadata(
@@ -991,29 +1151,45 @@ void RequireMetadataFlow(
     }
     deltas.previous_raw_output_to_input_recovered =
         RequireNonnegativeDifference(
-            previous_record->metadata_used_levels.raw_output,
+            UsedLevels(
+                previous_record->output_metadata,
+                "previous encoder raw output"),
             used.input,
             "previous raw output to refreshed layer input recovery");
 }
 
 void RequireLayerMetadataSchedule(
     std::size_t layer,
-    const LayerRecord& record) {
+    const LayerRecord& record,
+    const LayerRecord* previous_record) {
+    if (record.layer_id != layer) {
+        throw std::runtime_error("metadata record layer id drifted");
+    }
+    if (layer == 0 && previous_record != nullptr) {
+        throw std::runtime_error("layer zero unexpectedly has a previous record");
+    }
+    if (layer != 0 &&
+        (previous_record == nullptr ||
+         previous_record->layer_id + 1 != layer ||
+         !previous_record->handoff_refresh_performed)) {
+        throw std::runtime_error(
+            "exact inter-layer schedule is missing its preceding refresh");
+    }
     RequireMetadata(
         record.input_metadata,
         ExpectedInputMetadata(layer),
         "layer input");
     RequireMetadata(
         record.denominator_metadata,
-        kPolynomialCheckpointMetadata,
+        kSoftmaxCheckpointMetadata,
         "Softmax denominator checkpoint");
     RequireMetadata(
         record.ln1_variance_metadata,
-        kPolynomialCheckpointMetadata,
+        kLayerNormCheckpointMetadata,
         "LN1 variance checkpoint");
     RequireMetadata(
         record.ln2_variance_metadata,
-        kPolynomialCheckpointMetadata,
+        kLayerNormCheckpointMetadata,
         "LN2 variance checkpoint");
     RequireMetadata(
         record.attention_output_metadata,
@@ -1024,6 +1200,16 @@ void RequireLayerMetadataSchedule(
         record.attention_output_metadata,
         12,
         "layer input to attention output");
+    const uint32_t expected_attention_to_ln1_recovery =
+        layer == 0 ? 21 : 12;
+    if (RequireNonnegativeDifference(
+            UsedLevels(record.attention_output_metadata, "attention output"),
+            UsedLevels(record.ln1_variance_metadata, "LN1 checkpoint"),
+            "attention output to LN1 checkpoint recovery") !=
+        expected_attention_to_ln1_recovery) {
+        throw std::runtime_error(
+            "attention output to LN1 checkpoint recovery drifted");
+    }
 
     RequireMetadata(
         record.ln1_output_metadata,
@@ -1044,49 +1230,79 @@ void RequireLayerMetadataSchedule(
         record.ffn_output_metadata,
         13,
         "LN1 output to FFN output");
+    const uint32_t expected_ffn_to_ln2_recovery = layer == 0 ? 26 : 24;
+    if (RequireNonnegativeDifference(
+            UsedLevels(record.ffn_output_metadata, "FFN output"),
+            UsedLevels(record.ln2_variance_metadata, "LN2 checkpoint"),
+            "FFN output to LN2 checkpoint recovery") !=
+        expected_ffn_to_ln2_recovery) {
+        throw std::runtime_error("FFN output to LN2 checkpoint recovery drifted");
+    }
 
     RequireMetadata(
         record.output_metadata,
-        kEncoderRawOutputMetadata,
+        ExpectedEncoderRawOutputMetadata(layer),
         "encoder output");
     RequireUsedLevelDelta(
         record.ln2_variance_metadata,
         record.output_metadata,
         11,
         "LN2 bootstrap checkpoint to encoder output");
+    if (layer != 0 &&
+        RequireNonnegativeDifference(
+            UsedLevels(
+                previous_record->output_metadata,
+                "previous raw output"),
+            UsedLevels(record.input_metadata, "refreshed layer input"),
+            "previous raw output to refreshed input recovery") != 11) {
+        throw std::runtime_error(
+            "previous raw output to refreshed input recovery drifted");
+    }
 }
 
 void RequireCalibrationMetadataSchedule(
     std::size_t layer,
     const LayerRecord& record) {
     RequireMetadata(
+        record.input_metadata,
+        ExpectedInputMetadata(layer),
+        "calibration layer input");
+    RequireMetadata(
+        record.denominator_metadata,
+        kSoftmaxCheckpointMetadata,
+        "calibration Softmax denominator checkpoint");
+    RequireMetadata(
         record.attention_output_metadata,
         ExpectedAttentionOutputMetadata(layer),
-        "attention output");
-    if (layer == 0) {
-        RequireUsedLevelDelta(
-            record.input_metadata,
-            record.attention_output_metadata,
-            12,
-            "layer-0 input to attention output");
-        RequireMetadata(
-            record.ln1_output_metadata,
-            kLayer0LayerNorm1OutputMetadata,
-            "layer-0 LN1 output");
-        RequireMetadata(
-            record.ffn_output_metadata,
-            kLayer0FeedForwardOutputMetadata,
-            "layer-0 FFN output");
-        RequireUsedLevelDelta(
-            record.ln1_output_metadata,
-            record.ffn_output_metadata,
-            13,
-            "layer-0 LN1 output to FFN output");
-        RequireMetadata(
-            record.output_metadata,
-            kEncoderRawOutputMetadata,
-            "layer-0 encoder output");
-    }
+        "calibration attention output");
+    RequireUsedLevelDelta(
+        record.input_metadata,
+        record.attention_output_metadata,
+        12,
+        "calibration layer input to attention output");
+
+    // The post-inverse LayerNorm mask and explicit rescale intentionally change
+    // the downstream absolute schedule.  Calibration keeps all packing, scale,
+    // count, remaining-level consistency, upstream exact tuples, and numerical
+    // gates, but observes these downstream tuples before they are re-frozen.
+    static_cast<void>(UsedLevels(
+        record.ln1_variance_metadata,
+        "calibration LN1 variance checkpoint"));
+    static_cast<void>(UsedLevels(
+        record.ln1_output_metadata,
+        "calibration LN1 output"));
+    static_cast<void>(UsedLevels(
+        record.ffn_output_metadata,
+        "calibration FFN output"));
+    static_cast<void>(UsedLevels(
+        record.ln2_variance_metadata,
+        "calibration LN2 variance checkpoint"));
+    static_cast<void>(UsedLevels(
+        record.output_metadata,
+        "calibration encoder output"));
+    // Do not assume the two LayerNorm sites are metadata-identical while
+    // collecting the first live schedule for this graph.  Exact mode freezes
+    // each site independently after the calibration evidence is reviewed.
 }
 
 LayerRecord MakeSyntheticMetadataRecord(std::size_t layer) {
@@ -1095,14 +1311,14 @@ LayerRecord MakeSyntheticMetadataRecord(std::size_t layer) {
     record.input_metadata = layer == 0
         ? kLayer0InputMetadata
         : kLayerHandoffInputMetadata;
-    record.denominator_metadata = kPolynomialCheckpointMetadata;
-    record.ln1_variance_metadata = kPolynomialCheckpointMetadata;
-    record.ln2_variance_metadata = kPolynomialCheckpointMetadata;
+    record.denominator_metadata = kSoftmaxCheckpointMetadata;
+    record.ln1_variance_metadata = kLayerNormCheckpointMetadata;
+    record.ln2_variance_metadata = kLayerNormCheckpointMetadata;
     record.attention_output_metadata =
         ExpectedAttentionOutputMetadata(layer);
     record.ln1_output_metadata = ExpectedLayerNorm1OutputMetadata(layer);
     record.ffn_output_metadata = ExpectedFeedForwardOutputMetadata(layer);
-    record.output_metadata = kEncoderRawOutputMetadata;
+    record.output_metadata = ExpectedEncoderRawOutputMetadata(layer);
     return record;
 }
 
@@ -1184,6 +1400,74 @@ void ValidateInactiveZeroCheckpointContract() {
                 moai::openfhe::kPaperCompatHiddenSize);
         },
         "full-width intermediate checkpoint narrowed to hidden width");
+
+    InactiveZeroCheckpointAccumulator located_maximum;
+    for (const auto& label : expected) {
+        PlainMatrix checkpoint(
+            2,
+            std::vector<double>(
+                moai::openfhe::kPaperCompatFeatureBlock,
+                0.0));
+        if (label == "query") {
+            checkpoint[1][900] = -2e-6;
+        }
+        located_maximum.Observe(
+            label,
+            checkpoint,
+            ExpectedInactiveZeroCheckpointActiveFeatures(label));
+    }
+    if (located_maximum.Finish() != 2e-6 ||
+        located_maximum.maximum_label() != "query" ||
+        located_maximum.maximum_row() != 1 ||
+        located_maximum.maximum_slot() != 900) {
+        throw std::runtime_error(
+            "inactive checkpoint maximum-location diagnostic drifted");
+    }
+
+    const auto contracts = moai::openfhe::MakePaperCompatNonlinearContracts();
+    PlainMatrix inactive_guard_checkpoint(
+        1,
+        std::vector<double>(
+            moai::openfhe::kPaperCompatFeatureBlock,
+            17.0));
+    RequireLayerNormInactiveGuardInRange(
+        inactive_guard_checkpoint,
+        contracts.layernorm_inverse_sqrt.interval,
+        "synthetic LayerNorm inactive guard");
+    auto escaped_domain = inactive_guard_checkpoint;
+    escaped_domain.front().back() =
+        std::nextafter(
+            contracts.layernorm_inverse_sqrt.interval.minimum,
+            -std::numeric_limits<double>::infinity());
+    RequireScheduleRejection(
+        [&escaped_domain, &contracts]() {
+            RequireLayerNormInactiveGuardInRange(
+                escaped_domain,
+                contracts.layernorm_inverse_sqrt.interval,
+                "synthetic escaped LayerNorm inactive guard");
+        },
+        "LayerNorm inactive guard interval escape");
+    auto non_finite_domain = inactive_guard_checkpoint;
+    non_finite_domain.front().back() =
+        std::numeric_limits<double>::quiet_NaN();
+    RequireScheduleRejection(
+        [&non_finite_domain, &contracts]() {
+            RequireLayerNormInactiveGuardInRange(
+                non_finite_domain,
+                contracts.layernorm_inverse_sqrt.interval,
+                "synthetic non-finite LayerNorm inactive guard");
+        },
+        "non-finite LayerNorm inactive guard");
+    auto wrong_width_domain = inactive_guard_checkpoint;
+    wrong_width_domain.front().pop_back();
+    RequireScheduleRejection(
+        [&wrong_width_domain, &contracts]() {
+            RequireLayerNormInactiveGuardInRange(
+                wrong_width_domain,
+                contracts.layernorm_inverse_sqrt.interval,
+                "synthetic wrong-width LayerNorm inactive guard");
+        },
+        "wrong-width LayerNorm inactive guard");
 }
 
 void RequireRefreshPlacement(
@@ -1200,13 +1484,27 @@ void RequireRefreshPlacement(
 }
 
 void ValidateDiagnosticArgumentContract() {
-    const auto exact_prefix = ParseArgumentTokens(
+    const auto exact_one = ParseArgumentTokens(
+        {"--diagnostic-layer-count", "1"});
+    const auto exact_two = ParseArgumentTokens(
         {"--diagnostic-layer-count", "2"});
-    if (exact_prefix.requested_layer_count != 2 ||
-        exact_prefix.metadata_calibration ||
-        EvaluatedLayerCount(exact_prefix) != 2 ||
-        ResolveMetadataMode(exact_prefix) != MetadataMode::kExact ||
-        ResolveRunKind(exact_prefix) != RunKind::kExactPrefix) {
+    const auto exact_three = ParseArgumentTokens(
+        {"--diagnostic-layer-count", "3"});
+    if (exact_one.requested_layer_count != 1 ||
+        exact_two.requested_layer_count != 2 ||
+        exact_three.requested_layer_count != 3 ||
+        exact_one.metadata_calibration ||
+        exact_two.metadata_calibration ||
+        exact_three.metadata_calibration ||
+        EvaluatedLayerCount(exact_one) != 1 ||
+        EvaluatedLayerCount(exact_two) != 2 ||
+        EvaluatedLayerCount(exact_three) != 3 ||
+        ResolveMetadataMode(exact_one) != MetadataMode::kExact ||
+        ResolveMetadataMode(exact_two) != MetadataMode::kExact ||
+        ResolveMetadataMode(exact_three) != MetadataMode::kExact ||
+        ResolveRunKind(exact_one) != RunKind::kExactPrefix ||
+        ResolveRunKind(exact_two) != RunKind::kExactPrefix ||
+        ResolveRunKind(exact_three) != RunKind::kExactPrefix) {
         throw std::runtime_error("exact-prefix argument mode drifted");
     }
     const auto calibration = ParseArgumentTokens(
@@ -1223,6 +1521,21 @@ void ValidateDiagnosticArgumentContract() {
             moai::openfhe::kPaperCompatEncoderLayers ||
         ResolveMetadataMode(formal) != MetadataMode::kExact ||
         ResolveRunKind(formal) != RunKind::kFormalFull ||
+        FormalScheduleSealedForCompletedRun(
+            RunKind::kExactPrefix,
+            EvaluatedLayerCount(exact_one)) ||
+        FormalScheduleSealedForCompletedRun(
+            RunKind::kExactPrefix,
+            EvaluatedLayerCount(exact_two)) ||
+        !FormalScheduleSealedForCompletedRun(
+            RunKind::kExactPrefix,
+            EvaluatedLayerCount(exact_three)) ||
+        FormalScheduleSealedForCompletedRun(
+            RunKind::kMetadataCalibration,
+            EvaluatedLayerCount(calibration)) ||
+        !FormalScheduleSealedForCompletedRun(
+            RunKind::kFormalFull,
+            EvaluatedLayerCount(formal)) ||
         std::string(LayerTestName(RunKind::kFormalFull)) !=
             "openfhe_encoder_12_layer_layer" ||
         std::string(SummaryTestName(RunKind::kFormalFull)) !=
@@ -1262,6 +1575,32 @@ void ValidateDiagnosticArgumentContract() {
 }
 
 void ValidateMetadataScheduleContract() {
+    const OperationCounts calibration_counts = kExpectedEncoderLayerCounts;
+    RequireCalibrationLayerCounts(calibration_counts);
+    auto calibration_ct_pt_regression = calibration_counts;
+    --calibration_ct_pt_regression.ct_pt_multiplications;
+    RequireScheduleRejection(
+        [&calibration_ct_pt_regression]() {
+            RequireCalibrationLayerCounts(calibration_ct_pt_regression);
+        },
+        "calibration Ct-Pt lower-bound regression");
+    auto calibration_ct_pt_expansion = calibration_counts;
+    ++calibration_ct_pt_expansion.ct_pt_multiplications;
+    RequireScheduleRejection(
+        [&calibration_ct_pt_expansion]() {
+            RequireCalibrationLayerCounts(calibration_ct_pt_expansion);
+        },
+        "calibration Ct-Pt expansion");
+    auto calibration_iteration_drift = calibration_counts;
+    --calibration_iteration_drift.bootstrap_iterations;
+    RequireScheduleRejection(
+        [&calibration_iteration_drift]() {
+            RequireCalibrationLayerCounts(calibration_iteration_drift);
+        },
+        "calibration bootstrap-iteration drift");
+
+    std::vector<LayerRecord> exact_schedule_records;
+    exact_schedule_records.reserve(moai::openfhe::kPaperCompatEncoderLayers);
     for (std::size_t layer = 0;
          layer < moai::openfhe::kPaperCompatEncoderLayers;
          ++layer) {
@@ -1269,18 +1608,57 @@ void ValidateMetadataScheduleContract() {
         if (layer + 1 < moai::openfhe::kPaperCompatEncoderLayers) {
             record.handoff_refresh_performed = true;
         }
-        RequireLayerMetadataSchedule(layer, record);
+        const LayerRecord* previous_record = exact_schedule_records.empty()
+            ? nullptr
+            : &exact_schedule_records.back();
+        RequireMetadataFlow(record, previous_record);
+        RequireLayerMetadataSchedule(layer, record, previous_record);
+        exact_schedule_records.push_back(record);
     }
+    for (const std::size_t layer : {std::size_t{1}, std::size_t{2}}) {
+        const auto& recovery = exact_schedule_records[layer]
+            .metadata_used_level_deltas
+            .previous_raw_output_to_input_recovered;
+        if (!recovery.has_value() || *recovery != 11) {
+            throw std::runtime_error(
+                "exact-three second-handoff schedule contract drifted");
+        }
+    }
+    RequireCounts(
+        AddCounts(
+            MultiplyCounts(kExpectedEncoderLayerCounts, 2),
+            kExpectedInterLayerRefreshCounts),
+        kExpectedTwoLayerCumulativeCounts,
+        "two-layer cumulative calibration");
 
     auto layer0 = MakeSyntheticMetadataRecord(0);
     layer0.handoff_refresh_performed = true;
     RequireMetadataFlow(layer0, nullptr);
+    RequireCalibrationMetadataSchedule(0, layer0);
+    auto bad_calibration_denominator = layer0;
+    ++bad_calibration_denominator.denominator_metadata.level;
+    --bad_calibration_denominator.denominator_metadata.remaining_levels;
+    RequireScheduleRejection(
+        [&bad_calibration_denominator]() {
+            RequireCalibrationMetadataSchedule(
+                0,
+                bad_calibration_denominator);
+        },
+        "calibration Softmax checkpoint drift");
+    auto independently_observed_calibration_layernorm = layer0;
+    ++independently_observed_calibration_layernorm
+        .ln2_variance_metadata.level;
+    --independently_observed_calibration_layernorm
+        .ln2_variance_metadata.remaining_levels;
+    RequireCalibrationMetadataSchedule(
+        0,
+        independently_observed_calibration_layernorm);
     const auto layer1 = MakeSyntheticMetadataRecord(1);
     RequireScheduleRejection(
-        [&layer0]() { RequireLayerMetadataSchedule(1, layer0); },
+        [&layer0]() { RequireLayerMetadataSchedule(1, layer0, &layer0); },
         "layer-0 attention tuple at a later layer");
     RequireScheduleRejection(
-        [&layer1]() { RequireLayerMetadataSchedule(0, layer1); },
+        [&layer1]() { RequireLayerMetadataSchedule(0, layer1, nullptr); },
         "later-layer attention tuple at layer 0");
 
     auto wrong_later_ln1_regime = layer1;
@@ -1288,7 +1666,12 @@ void ValidateMetadataScheduleContract() {
         kLayer0LayerNorm1OutputMetadata;
     RequireScheduleRejection(
         [&wrong_later_ln1_regime]() {
-            RequireLayerMetadataSchedule(1, wrong_later_ln1_regime);
+            auto previous = MakeSyntheticMetadataRecord(0);
+            previous.handoff_refresh_performed = true;
+            RequireLayerMetadataSchedule(
+                1,
+                wrong_later_ln1_regime,
+                &previous);
         },
         "layer-0 LN1 tuple at a later layer");
 
@@ -1297,7 +1680,12 @@ void ValidateMetadataScheduleContract() {
         kLayer0FeedForwardOutputMetadata;
     RequireScheduleRejection(
         [&wrong_later_ffn_regime]() {
-            RequireLayerMetadataSchedule(1, wrong_later_ffn_regime);
+            auto previous = MakeSyntheticMetadataRecord(0);
+            previous.handoff_refresh_performed = true;
+            RequireLayerMetadataSchedule(
+                1,
+                wrong_later_ffn_regime,
+                &previous);
         },
         "layer-0 FFN tuple at a later layer");
 
@@ -1306,7 +1694,10 @@ void ValidateMetadataScheduleContract() {
         kLaterLayerNorm1OutputMetadata;
     RequireScheduleRejection(
         [&wrong_layer0_ln1_regime]() {
-            RequireLayerMetadataSchedule(0, wrong_layer0_ln1_regime);
+            RequireLayerMetadataSchedule(
+                0,
+                wrong_layer0_ln1_regime,
+                nullptr);
         },
         "later-layer LN1 tuple at layer 0");
 
@@ -1315,7 +1706,10 @@ void ValidateMetadataScheduleContract() {
         kLaterLayerFeedForwardOutputMetadata;
     RequireScheduleRejection(
         [&wrong_layer0_ffn_regime]() {
-            RequireLayerMetadataSchedule(0, wrong_layer0_ffn_regime);
+            RequireLayerMetadataSchedule(
+                0,
+                wrong_layer0_ffn_regime,
+                nullptr);
         },
         "later-layer FFN tuple at layer 0");
 
@@ -1323,32 +1717,32 @@ void ValidateMetadataScheduleContract() {
     bad_handoff_tuple.input_metadata.level = 18;
     bad_handoff_tuple.input_metadata.noise_scale_degree = 3;
     RequireScheduleRejection(
-        [&bad_handoff_tuple]() {
-            RequireLayerMetadataSchedule(1, bad_handoff_tuple);
+        [&bad_handoff_tuple, &layer0]() {
+            RequireLayerMetadataSchedule(1, bad_handoff_tuple, &layer0);
         },
         "inter-layer handoff integer tuple drift");
 
     auto bad_handoff_count = layer1;
     --bad_handoff_count.input_metadata.ciphertext_count;
     RequireScheduleRejection(
-        [&bad_handoff_count]() {
-            RequireLayerMetadataSchedule(1, bad_handoff_count);
+        [&bad_handoff_count, &layer0]() {
+            RequireLayerMetadataSchedule(1, bad_handoff_count, &layer0);
         },
         "inter-layer handoff ciphertext-count drift");
 
     auto bad_handoff_scale = layer1;
     bad_handoff_scale.input_metadata.scale_bits += 0.01;
     RequireScheduleRejection(
-        [&bad_handoff_scale]() {
-            RequireLayerMetadataSchedule(1, bad_handoff_scale);
+        [&bad_handoff_scale, &layer0]() {
+            RequireLayerMetadataSchedule(1, bad_handoff_scale, &layer0);
         },
         "inter-layer handoff scale drift");
 
     auto bad_handoff_remaining = layer1;
     --bad_handoff_remaining.input_metadata.remaining_levels;
     RequireScheduleRejection(
-        [&bad_handoff_remaining]() {
-            RequireLayerMetadataSchedule(1, bad_handoff_remaining);
+        [&bad_handoff_remaining, &layer0]() {
+            RequireLayerMetadataSchedule(1, bad_handoff_remaining, &layer0);
         },
         "inter-layer handoff remaining-level drift");
 
@@ -1401,7 +1795,7 @@ void ValidateMetadataScheduleContract() {
         },
         "FFN used-level delta drift");
 
-    auto bad_output_delta = kEncoderRawOutputMetadata;
+    auto bad_output_delta = kLaterLayerEncoderRawOutputMetadata;
     --bad_output_delta.level;
     ++bad_output_delta.remaining_levels;
     RequireScheduleRejection(
@@ -1429,9 +1823,9 @@ void ValidateMetadataScheduleContract() {
         },
         "used level equal to multiplicative depth");
 
-    auto live_final_observation = kEncoderRawOutputMetadata;
+    auto live_final_observation = kLaterLayerEncoderRawOutputMetadata;
     live_final_observation.scale_bits = 100.00000015989157;
-    auto live_final_reread = kEncoderRawOutputMetadata;
+    auto live_final_reread = kLaterLayerEncoderRawOutputMetadata;
     live_final_reread.scale_bits = 100.00000007994579;
     RequireLiveObservationEquivalent(
         live_final_reread,
@@ -1501,17 +1895,21 @@ void ValidateMetadataScheduleContract() {
         "negative Softmax checkpoint recovery");
 
     auto relaxed_layer1 = MakeSyntheticMetadataRecord(1);
-    relaxed_layer1.input_metadata =
-        TensorMetadata{20, 2, 26, kDoubleScaleBits, kDoubleScaleBits, 5};
-    relaxed_layer1.denominator_metadata =
-        TensorMetadata{19, 2, 27, kDoubleScaleBits, kDoubleScaleBits, 5};
-    relaxed_layer1.ln1_variance_metadata = relaxed_layer1.denominator_metadata;
-    relaxed_layer1.ln2_variance_metadata = relaxed_layer1.denominator_metadata;
+    const TensorMetadata candidate_layernorm_checkpoint{
+        20, 2, 26, kDoubleScaleBits, kDoubleScaleBits, 5};
+    relaxed_layer1.ln1_variance_metadata = candidate_layernorm_checkpoint;
+    relaxed_layer1.ln2_variance_metadata = candidate_layernorm_checkpoint;
+    relaxed_layer1.ln1_output_metadata =
+        TensorMetadata{31, 2, 15, kDoubleScaleBits, kDoubleScaleBits, 5};
+    relaxed_layer1.ffn_output_metadata =
+        TensorMetadata{44, 2, 2, kDoubleScaleBits, kDoubleScaleBits, 5};
+    relaxed_layer1.output_metadata =
+        TensorMetadata{31, 2, 15, kDoubleScaleBits, kDoubleScaleBits, 5};
     RequireMetadataFlow(relaxed_layer1, &layer0);
     RequireCalibrationMetadataSchedule(1, relaxed_layer1);
     RequireScheduleRejection(
-        [&relaxed_layer1]() {
-            RequireLayerMetadataSchedule(1, relaxed_layer1);
+        [&relaxed_layer1, &layer0]() {
+            RequireLayerMetadataSchedule(1, relaxed_layer1, &layer0);
         },
         "unsealed calibration tuple in exact mode");
     auto changed_known_output = relaxed_layer1;
@@ -1534,7 +1932,7 @@ void ValidateMetadataScheduleContract() {
 
     auto negative_handoff = MakeSyntheticMetadataRecord(1);
     negative_handoff.input_metadata =
-        TensorMetadata{30, 2, 16, kDoubleScaleBits, kDoubleScaleBits, 5};
+        TensorMetadata{31, 2, 15, kDoubleScaleBits, kDoubleScaleBits, 5};
     RequireScheduleRejection(
         [&negative_handoff, &layer0]() {
             RequireMetadataFlow(negative_handoff, &layer0);
@@ -1543,6 +1941,9 @@ void ValidateMetadataScheduleContract() {
 
     RequireRefreshPlacement(0, 2, true);
     RequireRefreshPlacement(1, 2, false);
+    RequireRefreshPlacement(0, 3, true);
+    RequireRefreshPlacement(1, 3, true);
+    RequireRefreshPlacement(2, 3, false);
     RequireScheduleRejection(
         []() { RequireRefreshPlacement(0, 2, false); },
         "missing first-layer prefix refresh");
@@ -1802,7 +2203,10 @@ public:
           contracts_(moai::openfhe::MakePaperCompatNonlinearContracts()),
           evaluated_layer_count_(evaluated_layer_count),
           metadata_mode_(metadata_mode),
-          run_kind_(run_kind) {}
+          run_kind_(run_kind),
+          inactive_maximum_(InactiveMaximumForRun(
+              run_kind,
+              evaluated_layer_count)) {}
 
     void Observe(const EncoderLayerCiphertextTrace& trace) override {
         const auto begin = Clock::now();
@@ -1886,22 +2290,25 @@ public:
         if (metadata_mode_ == MetadataMode::kExact) {
             RequireMetadata(
                 record.denominator_metadata,
-                kPolynomialCheckpointMetadata,
+                kSoftmaxCheckpointMetadata,
                 "denominator");
             RequireMetadata(
                 record.ln1_variance_metadata,
-                kPolynomialCheckpointMetadata,
+                kLayerNormCheckpointMetadata,
                 "LN1 variance");
             RequireMetadata(
                 record.ln2_variance_metadata,
-                kPolynomialCheckpointMetadata,
+                kLayerNormCheckpointMetadata,
                 "LN2 variance");
         }
         RequireMetadataFlow(
             record,
             records_.empty() ? nullptr : &records_.back());
         if (metadata_mode_ == MetadataMode::kExact) {
-            RequireLayerMetadataSchedule(layer, record);
+            RequireLayerMetadataSchedule(
+                layer,
+                record,
+                records_.empty() ? nullptr : &records_.back());
         }
         else {
             RequireCalibrationMetadataSchedule(layer, record);
@@ -1966,6 +2373,10 @@ public:
             "inactive Softmax denominator sentinel");
         const auto attention_layernorm_variance =
             client_.Decrypt(checkpoints.attention_layernorm_normalized_variance);
+        RequireLayerNormInactiveGuardInRange(
+            attention_layernorm_variance,
+            contracts_.layernorm_inverse_sqrt.interval,
+            "inactive attention LayerNorm variance guard");
         ObserveActive(
             attention_layernorm_variance,
             moai::openfhe::kPaperCompatHiddenSize,
@@ -1986,6 +2397,10 @@ public:
         }
         const auto output_layernorm_variance =
             client_.Decrypt(checkpoints.output_layernorm_normalized_variance);
+        RequireLayerNormInactiveGuardInRange(
+            output_layernorm_variance,
+            contracts_.layernorm_inverse_sqrt.interval,
+            "inactive output LayerNorm variance guard");
         ObserveActive(
             output_layernorm_variance,
             moai::openfhe::kPaperCompatHiddenSize,
@@ -2111,10 +2526,11 @@ public:
         }
         record.inactive_maximum = inactive_zero.Finish();
         record.inactive_zero_checkpoint_count = inactive_zero.count();
-        // These three polynomial-input checkpoints deliberately use 1.0 in
-        // inactive slots as the public reciprocal/inverse-square-root identity.
-        // Gate deviation from that frozen sentinel rather than incorrectly
-        // treating the slots as zero-valued activations.
+        // Softmax uses a public inactive identity of 1.0.  LayerNorm uses a
+        // preconditioned public guard whose restored value is expected near
+        // 1.0 but is gated only by the registered inverse-sqrt interval.
+        // The combined deviation is diagnostic; inactive activation outputs
+        // remain subject to the independent M5 prototype zero gate above.
         record.inactive_sentinel_maximum = std::max({
             MaximumInactiveDeviation(
                 softmax_denominator,
@@ -2128,11 +2544,16 @@ public:
                 output_layernorm_variance,
                 moai::openfhe::kPaperCompatHiddenSize,
                 1.0)});
-        if (record.inactive_maximum > kInactiveMaximum) {
+        if (record.inactive_maximum > inactive_maximum_) {
             std::ostringstream message;
             message << std::setprecision(17)
-                    << "encrypted inactive/cross-lane gate exceeded 1e-6: "
-                    << record.inactive_maximum;
+                    << "encrypted inactive/cross-lane gate exceeded "
+                    << inactive_maximum_ << ": "
+                    << record.inactive_maximum
+                    << " at layer=" << layer
+                    << " checkpoint=" << inactive_zero.maximum_label()
+                    << " ciphertext_row=" << inactive_zero.maximum_row()
+                    << " slot=" << inactive_zero.maximum_slot();
             throw std::runtime_error(message.str());
         }
 
@@ -2143,30 +2564,41 @@ public:
             trace.metrics_after_layer,
             trace.metrics_before_layer);
         record.cumulative_counts = Counts(trace.metrics_after_refresh);
-        const OperationCounts expected_layer{
-            6300, 51865, 95, 800, 55, 1150, 25, 50};
         const OperationCounts expected_refresh_counts = expected_refresh
-            ? OperationCounts{0, 5, 0, 5, 0, 0, 5, 10}
+            ? kExpectedInterLayerRefreshCounts
             : OperationCounts{};
-        RequireCounts(record.layer_counts, expected_layer, "encoder layer");
+        if (metadata_mode_ == MetadataMode::kExact) {
+            RequireCounts(
+                record.layer_counts,
+                kExpectedEncoderLayerCounts,
+                "encoder layer");
+        }
+        else {
+            RequireCalibrationLayerCounts(record.layer_counts);
+        }
         RequireCounts(
             record.refresh_counts,
             expected_refresh_counts,
             "inter-layer refresh");
-        const std::size_t completed_refreshes =
-            layer + (expected_refresh ? 1 : 0);
-        const auto expected_cumulative = AddCounts(
-            MultiplyCounts(expected_layer, layer + 1),
-            MultiplyCounts(
-                OperationCounts{0, 5, 0, 5, 0, 0, 5, 10},
-                completed_refreshes));
+        auto expected_cumulative = records_.empty()
+            ? OperationCounts{}
+            : records_.back().cumulative_counts;
+        expected_cumulative = AddCounts(
+            expected_cumulative,
+            record.layer_counts);
+        expected_cumulative = AddCounts(
+            expected_cumulative,
+            record.refresh_counts);
         RequireCounts(
             record.cumulative_counts,
             expected_cumulative,
             "encoder cumulative");
         if (trace.metrics_after_layer.multiplicative_depth != 47 ||
-            trace.metrics_after_layer.max_observed_level != 45 ||
-            trace.metrics_after_layer.max_polynomial_depth != 10) {
+            trace.metrics_after_layer.max_polynomial_depth != 10 ||
+            (metadata_mode_ == MetadataMode::kExact &&
+             trace.metrics_after_layer.max_observed_level != 45) ||
+            (metadata_mode_ == MetadataMode::kCalibration &&
+             trace.metrics_after_layer.max_observed_level >= 47)) {
             throw std::runtime_error("encoder depth metadata drifted");
         }
 
@@ -2202,8 +2634,7 @@ private:
                 << ",\"claim_scope\":\""
                 << ClaimScope(run_kind)
                 << "\",\"artifact_eligible\":false,"
-                << "\"formal_schedule_sealed\":"
-                << (run_kind == RunKind::kMetadataCalibration ? "false" : "true")
+                << "\"formal_schedule_sealed\":false"
                 << ",\"metadata_validation_mode\":\""
                 << (run_kind == RunKind::kMetadataCalibration
                         ? "calibration"
@@ -2283,6 +2714,7 @@ private:
     std::size_t evaluated_layer_count_{0};
     MetadataMode metadata_mode_{MetadataMode::kExact};
     RunKind run_kind_{RunKind::kFormalFull};
+    double inactive_maximum_{kStrictInactiveMaximum};
     std::vector<LayerRecord> records_;
     double validation_ms_{0.0};
 };
@@ -2418,9 +2850,10 @@ void PrintPreflight(const FrozenInputs& inputs, double elapsed_ms) {
         << "\"chain_mode\":\"plaintext_output_to_next_oracle_input\","
         << "\"expected_fixture_files\":444,"
         << "\"metadata_schedule_preflight\":"
-        << "\"synthetic_self_consistency_passed\","
+        << "\"synthetic_structure_only\","
         << "\"formal_metadata_schedule_source\":"
-        << "\"r6_two_layer_live_metadata_calibration\","
+        << "\"two_layer_live_candidate_requires_exact_three\","
+        << "\"formal_schedule_sealed\":false,"
         << "\"he_metadata_verified_by_preflight\":false,"
         << "\"trace_hash_gate\":\"separate_fail_closed_validator_required\","
         << "\"finite_and_in_range\":true,"
@@ -2443,6 +2876,7 @@ int main(int argc, char** argv) {
             ValidateDiagnosticArgumentContract();
             ValidateMetadataScheduleContract();
             ValidateInactiveZeroCheckpointContract();
+            ValidateInactiveMaximumPolicyContract();
             ValidateNoHomomorphicWorkContract();
             PrintPreflight(
                 inputs,
@@ -2518,6 +2952,9 @@ int main(int argc, char** argv) {
         const std::size_t layer_count = EvaluatedLayerCount(arguments);
         const RunKind run_kind = ResolveRunKind(arguments);
         const MetadataMode metadata_mode = ResolveMetadataMode(arguments);
+        const double inactive_maximum = InactiveMaximumForRun(
+            run_kind,
+            layer_count);
         ClientCheckpointValidator validator(
             client,
             server,
@@ -2548,7 +2985,7 @@ int main(int argc, char** argv) {
         if (metadata_mode == MetadataMode::kExact) {
             RequireMetadata(
                 final_metadata,
-                kEncoderRawOutputMetadata,
+                ExpectedEncoderRawOutputMetadata(layer_count - 1),
                 "final output");
         }
         else {
@@ -2568,10 +3005,10 @@ int main(int argc, char** argv) {
                 global_inactive_sentinel_maximum,
                 record.inactive_sentinel_maximum);
         }
-        if (global_inactive_maximum > kInactiveMaximum) {
+        if (global_inactive_maximum > inactive_maximum) {
             std::ostringstream message;
             message << std::setprecision(17)
-                    << "global inactive gate failed: "
+                    << "global inactive gate exceeded " << inactive_maximum << ": "
                     << global_inactive_maximum;
             throw std::runtime_error(message.str());
         }
@@ -2587,13 +3024,20 @@ int main(int argc, char** argv) {
             throw std::runtime_error("server diagnostic time is not positive");
         }
         const auto total_counts = Counts(server.metrics());
-        const OperationCounts expected_layer{
-            6300, 51865, 95, 800, 55, 1150, 25, 50};
-        const OperationCounts expected_refresh{0, 5, 0, 5, 0, 0, 5, 10};
         const auto expected_total = AddCounts(
-            MultiplyCounts(expected_layer, layer_count),
-            MultiplyCounts(expected_refresh, layer_count - 1));
-        RequireCounts(total_counts, expected_total, "final encoder");
+            MultiplyCounts(kExpectedEncoderLayerCounts, layer_count),
+            MultiplyCounts(
+                kExpectedInterLayerRefreshCounts,
+                layer_count - 1));
+        if (metadata_mode == MetadataMode::kExact) {
+            RequireCounts(total_counts, expected_total, "final encoder");
+        }
+        else {
+            RequireCounts(
+                total_counts,
+                validator.records().back().cumulative_counts,
+                "calibration final encoder");
+        }
 
         std::cout
             << "{\"test\":\"" << SummaryTestName(run_kind) << "\","
@@ -2605,7 +3049,11 @@ int main(int argc, char** argv) {
             std::cout
                 << ",\"artifact_eligible\":false,"
                 << "\"formal_schedule_sealed\":"
-                << (run_kind == RunKind::kMetadataCalibration ? "false" : "true")
+                << (FormalScheduleSealedForCompletedRun(
+                        run_kind,
+                        layer_count)
+                        ? "true"
+                        : "false")
                 << ",\"metadata_validation_mode\":\""
                 << (run_kind == RunKind::kMetadataCalibration
                         ? "calibration"
@@ -2647,7 +3095,9 @@ int main(int argc, char** argv) {
         std::cout << ",\"operation_counts\":";
         PrintCounts(total_counts);
         std::cout
-            << ",\"multiplicative_depth\":47,\"max_observed_level\":45,"
+            << ",\"multiplicative_depth\":47,\"max_observed_level\":"
+            << server.metrics().max_observed_level
+            << ','
             << "\"max_polynomial_depth\":10,\"peak_rss_bytes\":"
             << static_cast<unsigned long long>(usage.ru_maxrss) * 1024ULL
             << ",\"timing_claim\":false,"

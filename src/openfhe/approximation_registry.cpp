@@ -200,6 +200,89 @@ double PaperCompatSoftmaxPublicShift(
     return contract.At(layer, head);
 }
 
+std::array<double, kPaperCompatLayerNormTraceTokens>
+PaperCompatLayerNormVarianceScales(
+    PaperCompatLayerNormSite site,
+    std::size_t layer) {
+    using ScaleRow = std::array<double, kPaperCompatLayerNormTraceTokens>;
+    using ScaleSite = std::array<ScaleRow, kPaperCompatEncoderLayers>;
+    static const std::array<ScaleSite, 2> scales{{
+        ScaleSite{{
+            {128.0, 128.0, 256.0, 128.0, 256.0},
+            {256.0, 128.0, 256.0, 128.0, 256.0},
+            {256.0, 64.0, 128.0, 64.0, 256.0},
+            {256.0, 128.0, 128.0, 128.0, 256.0},
+            {128.0, 128.0, 128.0, 128.0, 512.0},
+            {128.0, 64.0, 128.0, 128.0, 512.0},
+            {128.0, 128.0, 128.0, 128.0, 256.0},
+            {128.0, 128.0, 128.0, 128.0, 512.0},
+            {128.0, 128.0, 128.0, 128.0, 512.0},
+            {128.0, 128.0, 128.0, 128.0, 512.0},
+            {64.0, 64.0, 64.0, 128.0, 1024.0},
+            {64.0, 64.0, 64.0, 128.0, 2048.0},
+        }},
+        ScaleSite{{
+            {8.0, 32.0, 16.0, 64.0, 16.0},
+            {8.0, 64.0, 16.0, 64.0, 8.0},
+            {16.0, 64.0, 16.0, 64.0, 1.0},
+            {32.0, 64.0, 32.0, 64.0, 1.0},
+            {32.0, 64.0, 32.0, 64.0, 1.0},
+            {32.0, 64.0, 32.0, 64.0, 2.0},
+            {32.0, 64.0, 32.0, 64.0, 2.0},
+            {32.0, 32.0, 32.0, 64.0, 4.0},
+            {32.0, 32.0, 32.0, 32.0, 4.0},
+            {32.0, 64.0, 32.0, 64.0, 0.25},
+            {32.0, 64.0, 64.0, 64.0, 0.0625},
+            {64.0, 64.0, 64.0, 64.0, 64.0},
+        }},
+    }};
+    static const bool validated = []() {
+        std::vector<double> flattened;
+        flattened.reserve(
+            2 * kPaperCompatEncoderLayers *
+            kPaperCompatLayerNormTraceTokens);
+        for (const auto& site_scales : scales) {
+            for (const auto& layer_scales : site_scales) {
+                for (const double value : layer_scales) {
+                    int exponent = 0;
+                    const double fraction = std::frexp(value, &exponent);
+                    if (!std::isfinite(value) || value <= 0.0 ||
+                        fraction != 0.5) {
+                        throw std::logic_error(
+                            "paper_compat LayerNorm scale is not a power of two");
+                    }
+                    flattened.push_back(value);
+                }
+            }
+        }
+        if (ComputeCoefficientSha256(flattened) !=
+            kPaperCompatLayerNormScaleSha256) {
+            throw std::logic_error(
+                "paper_compat LayerNorm scale registry hash drifted");
+        }
+        return true;
+    }();
+    static_cast<void>(validated);
+
+    if (layer >= kPaperCompatEncoderLayers) {
+        throw std::out_of_range(
+            "paper_compat LayerNorm scale layer is out of range");
+    }
+    std::size_t site_index = 0;
+    switch (site) {
+        case PaperCompatLayerNormSite::kAttentionResidual:
+            site_index = 0;
+            break;
+        case PaperCompatLayerNormSite::kFeedForwardResidual:
+            site_index = 1;
+            break;
+        default:
+            throw std::invalid_argument(
+                "paper_compat LayerNorm scale site is invalid");
+    }
+    return scales[site_index][layer];
+}
+
 PaperCompatNonlinearContracts MakePaperCompatNonlinearContracts() {
     PaperCompatNonlinearContracts contracts;
     contracts.softmax_shifts = MakePaperCompatSoftmaxShiftContract();

@@ -287,7 +287,7 @@ PlainMatrix LayerNorm(
     const PlainMatrix& input,
     const std::vector<double>& gamma,
     const std::vector<double>& beta,
-    double variance_scale,
+    const std::array<double, kPaperCompatLayerNormTraceTokens>& variance_scales,
     const ApproximationContract& inverse_sqrt,
     RangeAccumulator& observed,
     const std::string& label) {
@@ -298,10 +298,13 @@ PlainMatrix LayerNorm(
         label + " input");
     ValidateVector(gamma, kPaperCompatHiddenSize, label + " gamma");
     ValidateVector(beta, kPaperCompatHiddenSize, label + " beta");
-    Require(
-        variance_scale == kPaperCompatLayerNorm1VarianceScale ||
-            variance_scale == kPaperCompatLayerNorm2VarianceScale,
-        label + " variance scale is not frozen");
+    for (const double variance_scale : variance_scales) {
+        int exponent = 0;
+        Require(
+            std::isfinite(variance_scale) && variance_scale > 0.0 &&
+                std::frexp(variance_scale, &exponent) == 0.5,
+            label + " variance scale is not a frozen power of two");
+    }
 
     PlainMatrix output(
         kPaperCompatTraceTokens,
@@ -324,6 +327,7 @@ PlainMatrix LayerNorm(
         const double variance =
             squared_sum / static_cast<double>(kPaperCompatHiddenSize) +
             kPaperCompatLayerNormEpsilon;
+        const double variance_scale = variance_scales[token];
         const double normalized_variance = variance_scale * variance;
         observed.Observe(
             normalized_variance,
@@ -481,7 +485,9 @@ EncoderPlaintextOracleResult EvaluateEncoderLayerPlaintextOracle(
         self_residual,
         weights.attention_layernorm_gamma,
         weights.attention_layernorm_beta,
-        kPaperCompatLayerNorm1VarianceScale,
+        PaperCompatLayerNormVarianceScales(
+            PaperCompatLayerNormSite::kAttentionResidual,
+            weights.layer_index),
         contracts.layernorm_inverse_sqrt,
         attention_variance_range,
         "attention LayerNorm");
@@ -534,7 +540,9 @@ EncoderPlaintextOracleResult EvaluateEncoderLayerPlaintextOracle(
         output_residual,
         weights.output_layernorm_gamma,
         weights.output_layernorm_beta,
-        kPaperCompatLayerNorm2VarianceScale,
+        PaperCompatLayerNormVarianceScales(
+            PaperCompatLayerNormSite::kFeedForwardResidual,
+            weights.layer_index),
         contracts.layernorm_inverse_sqrt,
         output_variance_range,
         "output LayerNorm");

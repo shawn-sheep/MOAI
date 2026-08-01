@@ -54,6 +54,18 @@ Correctness precedes timing. A benchmark uses one warm-up and five measured repe
 reports median plus MAD/range, and separates setup/key generation, client work, and server
 online work. Thresholds may be tightened; relaxing one requires a reviewed contract change.
 
+## M5 runnable-prototype amendment (2026-08-01)
+
+The user explicitly authorized a correctness-contract revision that prioritizes a runnable
+MOAI-aligned prototype. Only the M5 exact-three and full-12 encoder-runtime inactive/cross-lane
+gate changes from `1e-6` to `1e-3`. The active per-layer and final rel-L2/cosine gates,
+finite/range checks, server-only boundary, and all M2/M3/M4 gates remain unchanged.
+
+Legacy MOAI does not assert or report an inactive/cross-lane threshold, so `1e-3` is a new
+engineering bound that is stricter than legacy observability. It must be labelled
+`prototype_only` and `MOAI-observability-compatible`; it is not a claim that legacy MOAI used
+`1e-3`, and it does not establish strict SEAL/OpenFHE numerical parity.
+
 ## Evidence boundary at M0
 
 The repository contains source entrypoints for basic CKKS, packing, linear operators, a

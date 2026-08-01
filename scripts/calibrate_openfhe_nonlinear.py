@@ -28,6 +28,15 @@ RELATIVE_L2_LIMIT = 1e-2
 COSINE_LIMIT = 0.999
 TWO_ITERATION_BOOTSTRAP_MAX_ABS = 1e-6
 SOFTMAX_DENOMINATOR_NOISE_RATIO_MIN = 100.0
+FEATURE_PACKED_LAYERNORM_SCALE_TARGET = 64.0
+FEATURE_PACKED_LAYERNORM_BOOTSTRAP_PRECONDITIONER = 2048.0
+FEATURE_PACKED_LAYERNORM_SCALE_CONTRACT_ID = "layernorm_layer_token_power2_scale_v1"
+FEATURE_PACKED_LAYERNORM_SCALE_SHA256 = (
+    "9436f05ce80b427de47700d924869b0dd6f13cc515e586446fcd2dc56faec28a"
+)
+FEATURE_PACKED_LAYERNORM_RAW_VARIANCE_SHA256 = (
+    "940f92de81915c2121b427b72827e4ed87d072fda0847266d0cb5521d60f93b6"
+)
 
 
 def load_trace(layer: int, relative_path: str) -> np.ndarray:
@@ -178,7 +187,9 @@ def require_quality_gate(name: str, summary: dict[str, object]) -> None:
         )
 
 
-def require_range(name: str, observed: tuple[float, float], hard: tuple[float, float]) -> None:
+def require_range(
+    name: str, observed: tuple[float, float], hard: tuple[float, float]
+) -> None:
     if observed[0] < hard[0] or observed[1] > hard[1]:
         raise RuntimeError(
             f"{name} range {observed} is outside the registered interval {hard}"
@@ -212,7 +223,9 @@ def constrain_chebyshev_zero_at_origin(
     interval: tuple[float, float],
 ) -> tuple[np.ndarray, dict[str, float | str]]:
     if interval[0] > 0.0 or interval[1] < 0.0:
-        raise ValueError("zero-at-origin constraint requires an interval containing zero")
+        raise ValueError(
+            "zero-at-origin constraint requires an interval containing zero"
+        )
     raw = np.asarray(coefficients, dtype=np.float64)
     raw_at_origin = float(
         evaluate_openfhe_chebyshev(
@@ -391,9 +404,7 @@ def calibrate_softmax() -> dict[str, object]:
         query_head_logsumexp = stable_logsumexp(qkt).squeeze(-1)
         minimum_per_head_shift = np.min(query_head_logsumexp, axis=0)
         maximum_per_head_shift = np.max(query_head_logsumexp, axis=0)
-        per_head_shift = 0.5 * (
-            minimum_per_head_shift + maximum_per_head_shift
-        )
+        per_head_shift = 0.5 * (minimum_per_head_shift + maximum_per_head_shift)
         shifts[layer, :] = per_head_shift
         shifted = qkt - per_head_shift[None, :, None]
         numerators = evaluate_openfhe_chebyshev(
@@ -492,9 +503,7 @@ def calibrate_softmax() -> dict[str, object]:
         (denominator_minimum, denominator_maximum),
         reciprocal_interval,
     )
-    denominator_noise_ratio = (
-        denominator_minimum / TWO_ITERATION_BOOTSTRAP_MAX_ABS
-    )
+    denominator_noise_ratio = denominator_minimum / TWO_ITERATION_BOOTSTRAP_MAX_ABS
     if denominator_noise_ratio < SOFTMAX_DENOMINATOR_NOISE_RATIO_MIN:
         raise RuntimeError(
             "Softmax denominator noise-margin gate failed: "
@@ -573,9 +582,7 @@ def calibrate_softmax() -> dict[str, object]:
             reciprocal_coefficients,
             reciprocal_interval,
         ),
-        "reciprocal_uniform_grid_max_relative_error": (
-            reciprocal_uniform_relative
-        ),
+        "reciprocal_uniform_grid_max_relative_error": (reciprocal_uniform_relative),
         "range_guards": {
             "shifted_logits": {
                 "hard_interval": list(exp_interval),
@@ -617,9 +624,7 @@ def calibrate_softmax() -> dict[str, object]:
                     TWO_ITERATION_BOOTSTRAP_MAX_ABS
                 ),
                 "minimum_denominator_to_noise_ratio": denominator_noise_ratio,
-                "required_minimum_ratio": (
-                    SOFTMAX_DENOMINATOR_NOISE_RATIO_MIN
-                ),
+                "required_minimum_ratio": (SOFTMAX_DENOMINATOR_NOISE_RATIO_MIN),
                 "minimum_denominator_after_negative_noise": (
                     denominator_after_negative_noise
                 ),
@@ -636,9 +641,7 @@ def calibrate_softmax() -> dict[str, object]:
         "rejected_row_specific_shift_candidate": {
             "status": "rejected_trust_boundary",
             "shift_kind": "activation_dependent_layer_head_query_row_logsumexp",
-            "candidate_derivation": (
-                "log(sum_j(exp(QKT[layer,query_row,head,j])))"
-            ),
+            "candidate_derivation": ("log(sum_j(exp(QKT[layer,query_row,head,j])))"),
             "runtime_plaintext_activation_required": True,
             "shifted_logit_observed_range": [
                 rejected_shift_minimum,
@@ -654,9 +657,7 @@ def calibrate_softmax() -> dict[str, object]:
                 rejected_reciprocal_interval,
             ),
             "plaintext_trace_validation": rejected_trace_validation,
-            "downstream_attention_times_v_validation": (
-                rejected_attention_validation
-            ),
+            "downstream_attention_times_v_validation": (rejected_attention_validation),
             "rejection_reason": (
                 "the shift varies with each query row and requires runtime "
                 "activation-derived logsumexp values; numerical quality cannot "
@@ -682,6 +683,258 @@ def layernorm_paths(site: str) -> tuple[str, str, str, str]:
         f"{stem}/parms/{prefix}_LayerNorm_weight.csv",
         f"{stem}/parms/{prefix}_LayerNorm_bias.csv",
     )
+
+
+def feature_packed_layernorm_scale(raw_population_variance: float) -> float:
+    if not math.isfinite(raw_population_variance) or raw_population_variance <= 0.0:
+        raise ValueError(
+            "FeaturePacked LayerNorm raw population variance must be positive"
+        )
+    exponent = round(
+        math.log2(FEATURE_PACKED_LAYERNORM_SCALE_TARGET / raw_population_variance)
+    )
+    return math.ldexp(1.0, exponent)
+
+
+def calibrate_feature_packed_layernorm(
+    coefficients: np.ndarray,
+    interval: tuple[float, float],
+) -> dict[str, object]:
+    site_order = ("ln1", "ln2")
+    raw_variances = np.empty(
+        (len(site_order), LAYER_COUNT, QUERY_ROWS),
+        dtype=np.float64,
+    )
+    scales = np.empty_like(raw_variances)
+    normalized_variance_minimum = math.inf
+    normalized_variance_maximum = -math.inf
+    per_site: dict[str, object] = {}
+    combined_per_layer = []
+
+    for site_index, site in enumerate(site_order):
+        input_path, expected_path, gamma_path, beta_path = layernorm_paths(site)
+        per_layer = []
+        exact_per_layer = []
+        site_normalized_minimum = math.inf
+        site_normalized_maximum = -math.inf
+        for layer in range(LAYER_COUNT):
+            inputs = load_trace(layer, input_path)
+            expected = load_trace(layer, expected_path)
+            gamma = load_trace(layer, gamma_path).reshape(-1)
+            beta = load_trace(layer, beta_path).reshape(-1)
+            if inputs.shape != (QUERY_ROWS, HIDDEN_SIZE):
+                raise RuntimeError(
+                    f"FeaturePacked {site} trace shape is not "
+                    f"{QUERY_ROWS}x{HIDDEN_SIZE}"
+                )
+
+            centered = inputs - np.mean(inputs, axis=1, keepdims=True)
+            raw_variance = np.mean(centered * centered, axis=1)
+            variance_scales = np.array(
+                [
+                    feature_packed_layernorm_scale(float(value))
+                    for value in raw_variance
+                ],
+                dtype=np.float64,
+            )
+            variance_with_epsilon = raw_variance + 1e-12
+            normalized_variance = variance_scales * variance_with_epsilon
+            approximate_inverse_std = np.sqrt(variance_scales) * (
+                evaluate_openfhe_chebyshev(
+                    normalized_variance,
+                    coefficients,
+                    *interval,
+                )
+            )
+            actual = centered * approximate_inverse_std[:, None] * gamma + beta
+            exact = centered / np.sqrt(variance_with_epsilon)[:, None] * gamma + beta
+            per_layer.append(quality(actual, expected))
+            exact_per_layer.append(quality(exact, expected))
+            raw_variances[site_index, layer, :] = raw_variance
+            scales[site_index, layer, :] = variance_scales
+            layer_minimum = float(np.min(normalized_variance))
+            layer_maximum = float(np.max(normalized_variance))
+            site_normalized_minimum = min(
+                site_normalized_minimum,
+                layer_minimum,
+            )
+            site_normalized_maximum = max(
+                site_normalized_maximum,
+                layer_maximum,
+            )
+            normalized_variance_minimum = min(
+                normalized_variance_minimum,
+                layer_minimum,
+            )
+            normalized_variance_maximum = max(
+                normalized_variance_maximum,
+                layer_maximum,
+            )
+
+        summary = summarize_layer_metrics(per_layer)
+        exact_summary = summarize_layer_metrics(exact_per_layer)
+        require_quality_gate(f"FeaturePacked LayerNorm {site}", summary)
+        require_range(
+            f"FeaturePacked LayerNorm {site} normalized variance",
+            (site_normalized_minimum, site_normalized_maximum),
+            interval,
+        )
+        combined_per_layer.extend(per_layer)
+        per_site[site] = {
+            "normalized_variance_observed_range": [
+                site_normalized_minimum,
+                site_normalized_maximum,
+            ],
+            "trace_validation": summary,
+            "exact_formula_trace_parity": exact_summary,
+        }
+
+    raw_variance_sha256 = tensor_sha256(raw_variances)
+    if raw_variance_sha256 != FEATURE_PACKED_LAYERNORM_RAW_VARIANCE_SHA256:
+        raise RuntimeError(
+            "FeaturePacked LayerNorm raw population-variance trace drifted: "
+            f"expected={FEATURE_PACKED_LAYERNORM_RAW_VARIANCE_SHA256} "
+            f"actual={raw_variance_sha256}"
+        )
+    scale_sha256 = tensor_sha256(scales)
+    if scale_sha256 != FEATURE_PACKED_LAYERNORM_SCALE_SHA256:
+        raise RuntimeError(
+            "FeaturePacked LayerNorm power-of-two scale registry drifted: "
+            f"expected={FEATURE_PACKED_LAYERNORM_SCALE_SHA256} "
+            f"actual={scale_sha256}"
+        )
+    for value in scales.reshape(-1):
+        fraction, _ = math.frexp(float(value))
+        if not math.isfinite(value) or value <= 0.0 or fraction != 0.5:
+            raise RuntimeError(
+                "FeaturePacked LayerNorm scale is not a positive power of two"
+            )
+
+    combined_summary = summarize_layer_metrics(combined_per_layer)
+    require_quality_gate(
+        "FeaturePacked LayerNorm combined",
+        combined_summary,
+    )
+    contract = {
+        "status": "plaintext_trace_gate_passed",
+        "contract_id": FEATURE_PACKED_LAYERNORM_SCALE_CONTRACT_ID,
+        "scope": {
+            "workload": "fixed five-token 12-layer encoder trace replay only",
+            "non_generalizable": True,
+            "visibility": "public pre-registered workload metadata",
+            "public_indices": ["site", "layer", "token"],
+            "runtime_activation_dependency": "none",
+            "derivation_source": (
+                "bundled plaintext residual tensors, used offline only"
+            ),
+            "forbidden": (
+                "deriving or selecting scales from runtime plaintext or "
+                "ciphertext activations, client-private inputs, or values "
+                "outside the registered site/layer/token trace coordinates"
+            ),
+        },
+        "shape": list(scales.shape),
+        "axis_order": ["site", "layer", "token"],
+        "site_order": list(site_order),
+        "layer_order": list(range(LAYER_COUNT)),
+        "token_order": list(range(QUERY_ROWS)),
+        "packing": {
+            "hidden_features": HIDDEN_SIZE,
+            "feature_slots": 1024,
+            "trace_tokens": QUERY_ROWS,
+            "inactive_feature_slots": 1024 - HIDDEN_SIZE,
+        },
+        "epsilon": {
+            "value": 1e-12,
+            "placement": (
+                "population variance + epsilon before multiplication by "
+                "the selected D[site,layer,token]"
+            ),
+        },
+        "selection": {
+            "target": FEATURE_PACKED_LAYERNORM_SCALE_TARGET,
+            "formula": ("D=2^roundTiesToEven(log2(64/raw_population_variance))"),
+            "rounding": "IEEE-style round ties to even",
+            "power_of_two_only": True,
+        },
+        "values": scales.tolist(),
+        "values_sha256": scale_sha256,
+        "values_sha256_encoding": (
+            "site-major ln1/ln2, then layer 0..11, then token 0..4; "
+            "raw IEEE-754 binary64 little-endian bytes"
+        ),
+        "raw_variance_sha256": raw_variance_sha256,
+        "raw_variance_sha256_encoding": (
+            "site-major ln1/ln2, then layer 0..11, then token 0..4; "
+            "raw IEEE-754 binary64 little-endian bytes"
+        ),
+        "raw_variance_observed_range": [
+            float(np.min(raw_variances)),
+            float(np.max(raw_variances)),
+        ],
+        "normalization_formula": {
+            "variance": "v=mean_i((x_i-mean(x))^2)+1e-12",
+            "polynomial_input": "u=D[site,layer,token]*v",
+            "inverse_standard_deviation": ("sqrt(D[site,layer,token])*ChebInvSqrt(u)"),
+            "sqrt_D_compensation": (
+                "fuse the per-site/layer/token sqrt(D) into public gamma"
+            ),
+            "output": ("gamma_i*(x_i-mean(x))*inverse_standard_deviation+beta_i"),
+        },
+        "normalized_variance_range": {
+            "hard_interval": list(interval),
+            "observed_trace_range": [
+                normalized_variance_minimum,
+                normalized_variance_maximum,
+            ],
+            "action_on_violation": (
+                "stop; do not clip or derive a runtime replacement scale"
+            ),
+        },
+        "bootstrap_execution": {
+            "placement": (
+                "after preconditioned normalized variance is formed, before "
+                "inverse sqrt"
+            ),
+            "preconditioner": (FEATURE_PACKED_LAYERNORM_BOOTSTRAP_PRECONDITIONER),
+            "active_pre_bootstrap_value": "u/2048",
+            "inactive_pre_bootstrap_guard": "1/2048",
+            "post_bootstrap_restore": ("multiply all 1024 slots uniformly by 2048"),
+            "post_restore_active_semantics": "active slots approximate u",
+            "post_restore_inactive_semantics": (
+                "inactive slots are an interval-checked diagnostic guard "
+                "near one, not an exact identity assertion"
+            ),
+            "post_inverse_mask": (
+                "after inverse-sqrt evaluation, multiply by the public "
+                "first-768-active/last-256-zero mask and rescale before "
+                "the centered ciphertext-ciphertext product"
+            ),
+        },
+        "inactive_guard": {
+            "pre_bootstrap_value": "1/2048",
+            "post_restore_target": 1.0,
+            "validation": (
+                "finite and inside the inverse-sqrt hard interval; deviation "
+                "from one is diagnostic only"
+            ),
+            "exact_identity_gate": False,
+            "post_inverse_mask": (
+                "the public first-768-active/last-256-zero mask removes "
+                "inactive inverse-sqrt slots before the centered product"
+            ),
+        },
+        "sites": per_site,
+        "trace_validation": combined_summary,
+        "contract_hash_encoding": (
+            "SHA-256 of canonical sorted-key compact JSON for this object, "
+            "excluding only contract_sha256"
+        ),
+    }
+    contract["contract_sha256"] = hashlib.sha256(
+        canonical_json(contract).encode("utf-8")
+    ).hexdigest()
+    return contract
 
 
 def calibrate_layernorm() -> dict[str, object]:
@@ -801,6 +1054,10 @@ def calibrate_layernorm() -> dict[str, object]:
             "final_centered_times_inverse_level": 1,
             "final_gamma_ct_pt_level": 1,
         },
+        "feature_packed_trace_scale_contract": calibrate_feature_packed_layernorm(
+            coefficients,
+            interval,
+        ),
         "combined_trace_validation": combined_summary,
     }
 
@@ -815,16 +1072,15 @@ def build_contract() -> dict[str, object]:
             "workload": "server-only 12-layer fixed BERT-base encoder trace replay",
             "status": "plaintext calibration only; ciphertext validation required",
             "non_generalizable": (
-                "Softmax uses only frozen layer/head scalar shifts and LayerNorm "
-                "uses frozen D_s values calibrated for the bundled traces; no "
-                "runtime activation-derived shift metadata is permitted"
+                "Softmax uses frozen layer/head scalar shifts; generic M3 "
+                "LayerNorm uses frozen site scalars; FeaturePacked LayerNorm "
+                "uses frozen site/layer/token scales. No runtime "
+                "activation-derived calibration metadata is permitted"
             ),
         },
         "chebyshev_convention": {
             "producer": "OpenFHE EvalChebyshevCoefficients-compatible DCT-II",
-            "nodes": (
-                "cos(pi/(degree+1)*(i+0.5))*(b-a)/2+(b+a)/2"
-            ),
+            "nodes": ("cos(pi/(degree+1)*(i+0.5))*(b-a)/2+(b+a)/2"),
             "raw_c0": "doubled; OpenFHE evaluator consumes c0/2",
             "coefficient_hash_encoding": (
                 "raw coefficient order as IEEE-754 binary64 little-endian bytes"
@@ -853,8 +1109,7 @@ def build_contract() -> dict[str, object]:
             "slots_to_coefficients_first": False,
             "levels_available_after_bootstrap": 12,
             "depth_formula": (
-                "12 + GetBootstrapDepth([4,4], SPARSE_TERNARY) + "
-                "(iterations-1)"
+                "12 + GetBootstrapDepth([4,4], SPARSE_TERNARY) + (iterations-1)"
             ),
             "precision_derivation": (
                 "floor(-log2(5.6e-4))=10 from the conservative observed "
@@ -891,9 +1146,7 @@ def validation_summary(contract: dict[str, object]) -> dict[str, object]:
             "worst_relative_l2": operators["gelu"]["trace_validation"][
                 "worst_relative_l2"
             ],
-            "minimum_cosine": operators["gelu"]["trace_validation"][
-                "minimum_cosine"
-            ],
+            "minimum_cosine": operators["gelu"]["trace_validation"]["minimum_cosine"],
             "observed_input_range": operators["gelu"]["input_guard"][
                 "observed_trace_range"
             ],
@@ -923,26 +1176,49 @@ def validation_summary(contract: dict[str, object]) -> dict[str, object]:
             ]["minimum_cosine"],
             "minimum_denominator_to_noise_ratio": operators["softmax"][
                 "bootstrap_placement"
-            ]["denominator_noise_margin_gate"][
-                "minimum_denominator_to_noise_ratio"
-            ],
+            ]["denominator_noise_margin_gate"]["minimum_denominator_to_noise_ratio"],
             "rejected_row_specific_status": operators["softmax"][
                 "rejected_row_specific_shift_candidate"
             ]["status"],
         },
         "layernorm": {
-            "worst_relative_l2": operators["layernorm"][
-                "combined_trace_validation"
-            ]["worst_relative_l2"],
-            "minimum_cosine": operators["layernorm"][
-                "combined_trace_validation"
-            ]["minimum_cosine"],
-            "ln1_D_s": operators["layernorm"]["sites"]["ln1"][
-                "variance_scale_D_s"
+            "worst_relative_l2": operators["layernorm"]["combined_trace_validation"][
+                "worst_relative_l2"
             ],
-            "ln2_D_s": operators["layernorm"]["sites"]["ln2"][
-                "variance_scale_D_s"
+            "minimum_cosine": operators["layernorm"]["combined_trace_validation"][
+                "minimum_cosine"
             ],
+            "ln1_D_s": operators["layernorm"]["sites"]["ln1"]["variance_scale_D_s"],
+            "ln2_D_s": operators["layernorm"]["sites"]["ln2"]["variance_scale_D_s"],
+            "feature_packed_contract_id": operators["layernorm"][
+                "feature_packed_trace_scale_contract"
+            ]["contract_id"],
+            "feature_packed_contract_sha256": operators["layernorm"][
+                "feature_packed_trace_scale_contract"
+            ]["contract_sha256"],
+            "feature_packed_scale_values_sha256": operators["layernorm"][
+                "feature_packed_trace_scale_contract"
+            ]["values_sha256"],
+            "feature_packed_raw_variance_sha256": operators["layernorm"][
+                "feature_packed_trace_scale_contract"
+            ]["raw_variance_sha256"],
+            "feature_packed_normalized_variance_range": (
+                operators["layernorm"]["feature_packed_trace_scale_contract"][
+                    "normalized_variance_range"
+                ]["observed_trace_range"]
+            ),
+            "feature_packed_worst_relative_l2": operators["layernorm"][
+                "feature_packed_trace_scale_contract"
+            ]["trace_validation"]["worst_relative_l2"],
+            "feature_packed_minimum_cosine": operators["layernorm"][
+                "feature_packed_trace_scale_contract"
+            ]["trace_validation"]["minimum_cosine"],
+            "feature_packed_non_generalizable": operators["layernorm"][
+                "feature_packed_trace_scale_contract"
+            ]["scope"]["non_generalizable"],
+            "feature_packed_runtime_activation_dependency": operators["layernorm"][
+                "feature_packed_trace_scale_contract"
+            ]["scope"]["runtime_activation_dependency"],
         },
         "passed": True,
     }
@@ -967,9 +1243,7 @@ def parse_arguments() -> argparse.Namespace:
         type=Path,
         nargs="?",
         const=Path("-"),
-        help=(
-            "emit a freshly calibrated JSON contract to stdout, or write PATH"
-        ),
+        help=("emit a freshly calibrated JSON contract to stdout, or write PATH"),
     )
     return parser.parse_args()
 
@@ -999,9 +1273,7 @@ def main() -> int:
     with arguments.config.open("r", encoding="utf-8") as handle:
         frozen = json.load(handle)
     if canonical_json(frozen) != canonical_json(generated):
-        frozen_hash = hashlib.sha256(
-            canonical_json(frozen).encode("utf-8")
-        ).hexdigest()
+        frozen_hash = hashlib.sha256(canonical_json(frozen).encode("utf-8")).hexdigest()
         generated_hash = hashlib.sha256(
             canonical_json(generated).encode("utf-8")
         ).hexdigest()

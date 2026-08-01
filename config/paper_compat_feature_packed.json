@@ -5,7 +5,7 @@
   "security_claim": "none",
   "warning": "Research reproduction parameters only. Do not claim 128-bit security.",
   "scope": "M4/M5 five-token BERT-base encoder trace replay with one 1024-slot ciphertext per token",
-  "validation_status": "five-token layer-1 server-only encoder gate passed; 12-layer encoder gate required",
+  "validation_status": "exact-three live M5 metadata schedule sealed; live M4 regression and full 12-layer MOAI-observability-compatible prototype gates remain required",
   "canonical_encoding": "UTF-8 JSON with lexicographically sorted keys and compact separators",
   "effective_profile_sha256": "94f30e628e21f02146ce7ed9820194eabba3820f6e1e17176a31f8c5acf8b0be",
   "effective_profile": {
@@ -33,6 +33,127 @@
     "slot_count": 32768,
     "sparse_secret_hamming_weight": 192
   },
+  "m5_prototype_acceptance": {
+    "contract_id": "moai_observability_compatible_prototype_v1",
+    "status": "user_authorized_2026-08-01",
+    "scope": "M5 exact-three and full-12 encrypted encoder runtime only; M2 packing, M3 nonlinear, and M4 single-layer gates remain unchanged",
+    "legacy_basis": "legacy MOAI has no inactive/cross-lane numerical assertion and observes only active slots; 1e-3 is a new prototype engineering bound, not a legacy MOAI threshold",
+    "thresholds": {
+      "per_layer_relative_l2_max": 0.05,
+      "per_layer_cosine_min": 0.99,
+      "final_relative_l2_max": 0.05,
+      "final_cosine_min": 0.99,
+      "inactive_or_cross_lane_max_absolute": 0.001,
+      "finite_required": true
+    },
+    "active_quality_policy": "unchanged from the original M5 contract",
+    "sentinel_range_policy": "registered polynomial intervals and inactive guard range checks remain unchanged",
+    "claim_boundary": "prototype_only; MOAI-observability-compatible; not strict numerical parity and not evidence that 1e-3 was used by legacy MOAI"
+  },
+  "m5_schedule_candidate": {
+    "status": "sealed_exact3",
+    "source": "approved exact-three-layer live OpenFHE schedule evidence",
+    "formal_schedule_sealed": true,
+    "calibrated_layers": [0, 1, 2],
+    "exact3_seal": {
+      "source": "approved exact-three-layer live OpenFHE schedule evidence",
+      "evidence": {
+        "run_id": "20260801T124248+0900-m5-runnable-prototype-exact3-339daa5-r23",
+        "relative_path": "results/openfhe/20260801T124248+0900-m5-runnable-prototype-exact3-339daa5-r23",
+        "manifest_sha256": "a19a578b3381343ad602713b528310dee52cbe09bccfd39c560ebc33159203e4",
+        "sha256sums_sha256": "aa9d0c37bb2bfbfa86b33b9d4c3bdeaefd7cffa17b17c26710b78524f60bad8e",
+        "layer_count": 3,
+        "artifact_eligible": false,
+        "exact3_gate_passed": true,
+        "schedule_evidence_eligible": true,
+        "formal_schedule_sealed": true
+      },
+      "pre_seal_profile": {
+        "path": "config/paper_compat_feature_packed.json",
+        "sha256": "82a6b2122c91672228b95c3e4e6ed1226dc2b0f00fd646124b84f418ce62e69c",
+        "size_bytes": 8961,
+        "transition": "candidate profile captured by the exact3 sealer before the one-way schedule-seal transition"
+      }
+    },
+    "metadata_tuple_order": ["level", "noise_scale_degree", "remaining_levels"],
+    "used_level_delta_order": [
+      "input_to_softmax_checkpoint_net_recovered",
+      "softmax_checkpoint_to_attention_output_consumed",
+      "attention_output_to_ln1_checkpoint_net_recovered",
+      "ln1_checkpoint_to_ln1_output_consumed",
+      "ln1_output_to_ffn_output_consumed",
+      "ffn_output_to_ln2_checkpoint_net_recovered",
+      "ln2_checkpoint_to_raw_output_consumed",
+      "previous_raw_output_to_input_recovered"
+    ],
+    "layer_regimes": {
+      "layer0": {
+        "observed_layer_ids": [0],
+        "checkpoint_metadata": {
+          "input": [29, 1, 18],
+          "softmax_denominator": [18, 2, 28],
+          "attention_output": [40, 2, 6],
+          "ln1_variance": [19, 2, 27],
+          "ln1_output": [32, 2, 14],
+          "ffn_output": [45, 2, 1],
+          "ln2_variance": [19, 2, 27],
+          "raw_output": [30, 2, 16]
+        },
+        "used_level_deltas": [10, 22, 21, 13, 13, 26, 11, null]
+      },
+      "later_layers": {
+        "observed_layer_ids": [1],
+        "candidate_layer_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+        "checkpoint_metadata": {
+          "input": [19, 2, 27],
+          "softmax_denominator": [18, 2, 28],
+          "attention_output": [31, 2, 15],
+          "ln1_variance": [19, 2, 27],
+          "ln1_output": [30, 2, 16],
+          "ffn_output": [43, 2, 3],
+          "ln2_variance": [19, 2, 27],
+          "raw_output": [30, 2, 16]
+        },
+        "used_level_deltas": [1, 13, 12, 11, 13, 24, 11, 11]
+      }
+    },
+    "per_encoder_layer_operation_counts": {
+      "rotations": 6300,
+      "ct_pt_multiplications": 51885,
+      "ct_ct_multiplications": 95,
+      "explicit_rescale_requests": 810,
+      "chebyshev_evaluations": 55,
+      "estimated_polynomial_multiplications": 1150,
+      "bootstraps": 25,
+      "bootstrap_iterations": 50
+    },
+    "per_inter_layer_refresh_operation_counts": {
+      "rotations": 0,
+      "ct_pt_multiplications": 5,
+      "ct_ct_multiplications": 0,
+      "explicit_rescale_requests": 5,
+      "chebyshev_evaluations": 0,
+      "estimated_polynomial_multiplications": 0,
+      "bootstraps": 5,
+      "bootstrap_iterations": 10
+    },
+    "two_layer_cumulative_operation_counts": {
+      "rotations": 12600,
+      "ct_pt_multiplications": 103775,
+      "ct_ct_multiplications": 190,
+      "explicit_rescale_requests": 1625,
+      "chebyshev_evaluations": 110,
+      "estimated_polynomial_multiplications": 2300,
+      "bootstraps": 55,
+      "bootstrap_iterations": 110
+    },
+    "sealing_requirements": {
+      "minimum_exact_diagnostic_layers": 3,
+      "exact_three_purpose": "validate the second inter-layer handoff and later-layer steady-state regime",
+      "live_m4_regression_required": true,
+      "full_12_layer_prototype_validation_required": true
+    }
+  },
   "feature_packed_softmax_override": {
     "scope": "M4/M5 1024-slot multi-head path only; the M3 generic Softmax contract is unchanged",
     "exponential_coefficient_sha256": "6eda4377151897e8c4ca4d72f2a918db0b888fc6771f8ee5cf1d950b378de76f",
@@ -42,7 +163,41 @@
     "post_bootstrap_required_depth": 11,
     "attention_output_cleanup": "native bootstrap followed by one public 768-prefix Ct-Pt mask",
     "gate": {
+      "scope": "M4 single-layer and standalone FeaturePacked regression only; M5 exact-three/full-12 is governed by /m5_prototype_acceptance",
       "inactive_max_absolute": 1e-6,
+      "threshold_policy": "may tighten; never silently relax"
+    }
+  },
+  "feature_packed_layernorm_override": {
+    "scope": "M4/M5 FeaturePacked LayerNorm only; generic M3 LayerNorm is unchanged",
+    "fixed_shape": "2 sites x 12 layers x 5 public token rows; 768 active features in 1024 slots",
+    "trace_scale_contract": {
+      "source_path": "config/openfhe_approximations.json",
+      "json_locator": "operators.layernorm.feature_packed_trace_scale_contract",
+      "contract_id": "layernorm_layer_token_power2_scale_v1",
+      "contract_sha256": "b493b032e461e15d7436efe7fff5948436afa8e302646daa97db78fa1d59be3e",
+      "values_sha256": "9436f05ce80b427de47700d924869b0dd6f13cc515e586446fcd2dc56faec28a",
+      "raw_variance_sha256": "940f92de81915c2121b427b72827e4ed87d072fda0847266d0cb5521d60f93b6"
+    },
+    "scale_selection": "pre-registered D=2^roundTiesToEven(log2(64/raw_population_variance)) selected only by public site/layer/token coordinates",
+    "runtime_activation_dependency": "none",
+    "active_epsilon_placement": "public epsilon is multiplied by the selected D and added to the active 768-slot prefix before native bootstrap",
+    "bootstrap": "OpenFHE native CKKS bootstrap",
+    "bootstrap_preconditioner": 2048,
+    "pre_bootstrap_values": "active u/2048 and inactive public guard 1/2048",
+    "post_bootstrap_restore": "one uniform all-1024-slot public multiplication by 2048 on each ciphertext",
+    "post_inverse_cleanup": "one public first-768-active/last-256-zero Ct-Pt mask and explicit rescale before the centered Ct-Ct merge",
+    "gamma_application": "per-token public gamma*sqrt(D) Ct-Pt multiplication on the centered branch before the inverse-sqrt merge",
+    "sites_per_encoder_layer": 2,
+    "ciphertexts_per_site": 5,
+    "post_bootstrap_required_depth": 12,
+    "schedule_status": "sealed",
+    "gate": {
+      "scope": "M4 single-layer and standalone FeaturePacked regression only; M5 exact-three/full-12 is governed by /m5_prototype_acceptance",
+      "normalized_variance_interval": [0.5, 1536.0],
+      "inactive_guard_in_interval_required": true,
+      "inactive_guard_deviation_from_one": "diagnostic_only",
+      "output_inactive_max_absolute": 1e-6,
       "threshold_policy": "may tighten; never silently relax"
     }
   }

@@ -15,7 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "validate_openfhe_encoder_trace.py"
 MANIFEST_PATH = REPO_ROOT / "config" / "moai_encoder_trace.json"
 
-SPEC = importlib.util.spec_from_file_location("validate_openfhe_encoder_trace", SCRIPT_PATH)
+SPEC = importlib.util.spec_from_file_location(
+    "validate_openfhe_encoder_trace", SCRIPT_PATH
+)
 if SPEC is None or SPEC.loader is None:  # pragma: no cover - import machinery failure
     raise RuntimeError(f"cannot import validator: {SCRIPT_PATH}")
 VALIDATOR = importlib.util.module_from_spec(SPEC)
@@ -81,6 +83,69 @@ class EncoderTraceContractTest(unittest.TestCase):
         with self.assertRaisesRegex(VALIDATOR.ContractError, "approximation_binding"):
             self._validate_structure(manifest)
 
+    def test_feature_packed_scale_matrix_or_hash_tamper_fails_closed(self) -> None:
+        _, approximation_source = VALIDATOR.source_contracts()
+        for label, mutate, expected_error in (
+            (
+                "matrix",
+                lambda contract: contract["values"][0][0].__setitem__(
+                    0, contract["values"][0][0][0] / 2.0
+                ),
+                "scale values matrix or SHA-256",
+            ),
+            (
+                "values hash",
+                lambda contract: contract.__setitem__("values_sha256", "0" * 64),
+                "scale values matrix or SHA-256",
+            ),
+            (
+                "contract hash",
+                lambda contract: contract.__setitem__("contract_sha256", "0" * 64),
+                "contract matrix or contract SHA-256",
+            ),
+        ):
+            with self.subTest(label=label):
+                tampered = copy.deepcopy(approximation_source)
+                contract = tampered["operators"]["layernorm"][
+                    "feature_packed_trace_scale_contract"
+                ]
+                mutate(contract)
+                binding = VALIDATOR.extract_approximation_binding(tampered)
+                with self.assertRaisesRegex(VALIDATOR.ContractError, expected_error):
+                    VALIDATOR.approximation_runtime(tampered, binding)
+
+    def test_feature_packed_raw_hash_or_selection_tamper_fails_closed(self) -> None:
+        _, approximation_source = VALIDATOR.source_contracts()
+        for label, mutate, expected_error in (
+            (
+                "raw variance hash",
+                lambda contract: contract.__setitem__("raw_variance_sha256", "0" * 64),
+                "raw population-variance SHA-256",
+            ),
+            (
+                "selection target",
+                lambda contract: contract["selection"].__setitem__("target", 32.0),
+                "selection changed",
+            ),
+            (
+                "selection formula",
+                lambda contract: contract["selection"].__setitem__(
+                    "formula",
+                    "D=2^floor(log2(64/raw_population_variance))",
+                ),
+                "selection changed",
+            ),
+        ):
+            with self.subTest(label=label):
+                tampered = copy.deepcopy(approximation_source)
+                contract = tampered["operators"]["layernorm"][
+                    "feature_packed_trace_scale_contract"
+                ]
+                mutate(contract)
+                binding = VALIDATOR.extract_approximation_binding(tampered)
+                with self.assertRaisesRegex(VALIDATOR.ContractError, expected_error):
+                    VALIDATOR.approximation_runtime(tampered, binding)
+
     def test_trace_file_hash_mismatch_fails_before_numeric_validation(self) -> None:
         original_sha256 = VALIDATOR.sha256_file
 
@@ -89,7 +154,9 @@ class EncoderTraceContractTest(unittest.TestCase):
                 return "0" * 64
             return original_sha256(path)
 
-        with mock.patch.object(VALIDATOR, "sha256_file", side_effect=changed_trace_digest):
+        with mock.patch.object(
+            VALIDATOR, "sha256_file", side_effect=changed_trace_digest
+        ):
             with self.assertRaisesRegex(VALIDATOR.ContractError, "SHA-256 mismatch"):
                 VALIDATOR.validate_contract(REPO_ROOT / "data", self.manifest)
 
@@ -102,13 +169,17 @@ class EncoderTraceContractTest(unittest.TestCase):
             [{} for _ in range(12)],
         )
         with mock.patch.object(VALIDATOR, "run_trace", return_value=cached_result):
-            with self.assertRaisesRegex(VALIDATOR.ContractError, "chained_oracle_summary"):
+            with self.assertRaisesRegex(
+                VALIDATOR.ContractError, "chained_oracle_summary"
+            ):
                 VALIDATOR.validate_contract(REPO_ROOT / "data", manifest)
 
     def test_duplicate_json_keys_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             path = Path(temporary_directory) / "duplicate.json"
-            path.write_text('{"schema_version": 1, "schema_version": 1}\n', encoding="utf-8")
+            path.write_text(
+                '{"schema_version": 1, "schema_version": 1}\n', encoding="utf-8"
+            )
             with self.assertRaisesRegex(VALIDATOR.ContractError, "duplicate JSON key"):
                 VALIDATOR.load_json(path)
 
@@ -119,7 +190,9 @@ class EncoderTraceContractTest(unittest.TestCase):
     @staticmethod
     def _validate_structure(manifest: dict) -> None:
         scale_source, approximation_source = VALIDATOR.source_contracts()
-        VALIDATOR.validate_manifest_structure(manifest, scale_source, approximation_source)
+        VALIDATOR.validate_manifest_structure(
+            manifest, scale_source, approximation_source
+        )
 
 
 if __name__ == "__main__":

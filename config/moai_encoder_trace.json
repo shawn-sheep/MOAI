@@ -2,6 +2,74 @@
   "approximation_binding": {
     "layernorm": {
       "epsilon": 1e-12,
+      "feature_packed_trace_scale_contract": {
+        "axis_order": [
+          "site",
+          "layer",
+          "token"
+        ],
+        "bootstrap_preconditioner": 2048.0,
+        "contract_id": "layernorm_layer_token_power2_scale_v1",
+        "contract_sha256": "b493b032e461e15d7436efe7fff5948436afa8e302646daa97db78fa1d59be3e",
+        "epsilon": {
+          "placement": "population variance + epsilon before multiplication by the selected D[site,layer,token]",
+          "value": 1e-12
+        },
+        "inactive_guard": {
+          "exact_identity_gate": false,
+          "post_inverse_mask": "the public first-768-active/last-256-zero mask removes inactive inverse-sqrt slots before the centered product",
+          "post_restore_target": 1.0,
+          "pre_bootstrap_value": "1/2048",
+          "validation": "finite and inside the inverse-sqrt hard interval; deviation from one is diagnostic only"
+        },
+        "layer_order": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "raw_variance_sha256": "940f92de81915c2121b427b72827e4ed87d072fda0847266d0cb5521d60f93b6",
+        "scope": {
+          "non_generalizable": true,
+          "public_indices": [
+            "site",
+            "layer",
+            "token"
+          ],
+          "runtime_activation_dependency": "none"
+        },
+        "selection": {
+          "formula": "D=2^roundTiesToEven(log2(64/raw_population_variance))",
+          "power_of_two_only": true,
+          "rounding": "IEEE-style round ties to even",
+          "target": 64.0
+        },
+        "shape": [
+          2,
+          12,
+          5
+        ],
+        "site_order": [
+          "ln1",
+          "ln2"
+        ],
+        "token_order": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "values_sha256": "9436f05ce80b427de47700d924869b0dd6f13cc515e586446fcd2dc56faec28a"
+      },
       "ln1_variance_scale_D_s": 64.0,
       "ln2_variance_scale_D_s": 1.0
     },
@@ -80,39 +148,50 @@
     }
   },
   "chained_oracle_summary": {
+    "feature_packed_layernorm_scale_selection": {
+      "contract_id": "layernorm_layer_token_power2_scale_v1",
+      "contract_sha256": "b493b032e461e15d7436efe7fff5948436afa8e302646daa97db78fa1d59be3e",
+      "coordinate_order": [
+        "site",
+        "layer",
+        "token"
+      ],
+      "runtime_activation_dependency": "none",
+      "selection": "pre-registered public coordinate lookup only; chained activations are never inspected to select D"
+    },
     "final": {
-      "cosine": 0.999944942514787,
+      "cosine": 0.9999444226229512,
       "layer_id": 11,
-      "max_absolute": 0.07618263327099317,
-      "relative_l2": 0.010519199488026413
+      "max_absolute": 0.07050319720197029,
+      "relative_l2": 0.010676974997627438
     },
     "final_gate": {
       "cosine": 0.99,
       "max_absolute": 0.1,
       "relative_l2": 0.05
     },
-    "maximum_absolute": 0.09976871537536036,
-    "minimum_cosine": 0.999944942514787,
+    "maximum_absolute": 0.09286962991808734,
+    "minimum_cosine": 0.9999444226229512,
     "observed_ranges": {
       "gelu_input": [
-        -60.90997840997095,
-        122.80584340973375
+        -60.94863917442944,
+        122.77638179497981
       ],
       "ln1_normalized_variance": [
-        1.559921924961595,
-        65.92639994632418
+        45.286738442032295,
+        89.40612388178232
       ],
       "ln2_normalized_variance": [
-        0.7711727874023071,
-        1275.3092456646355
+        45.530491235309945,
+        89.0434461726423
       ],
       "softmax_denominator": [
-        0.013164405863243273,
-        76.73250948682391
+        0.013112879348878975,
+        76.27535888036451
       ],
       "softmax_shifted_logits": [
-        -15.067747120327708,
-        4.339600260745062
+        -15.075321045691314,
+        4.333621756562744
       ]
     },
     "oracle": "frozen OpenFHE-order Chebyshev plaintext replay",
@@ -121,22 +200,22 @@
       {
         "layer_id": 0,
         "metrics": {
-          "cosine": 0.999998778895378,
-          "max_absolute": 0.012056555059118956,
-          "relative_l2": 0.0015713992547119072
+          "cosine": 0.9999989410045913,
+          "max_absolute": 0.009993845852454442,
+          "relative_l2": 0.0015021945973760012
         },
         "ranges": {
           "gelu_input": [
-            -15.453325797999769,
-            8.187285833234172
+            -15.44972744320672,
+            8.183037801560676
           ],
           "ln1_normalized_variance": [
-            17.51842630700885,
-            27.841426185307984
+            45.286738442032295,
+            73.89404010989917
           ],
           "ln2_normalized_variance": [
-            1.223930981277494,
-            6.9253009796762415
+            46.13884541869377,
+            82.18391150782362
           ],
           "softmax_denominator": [
             0.09778020866027208,
@@ -151,330 +230,330 @@
       {
         "layer_id": 1,
         "metrics": {
-          "cosine": 0.9999962615533423,
-          "max_absolute": 0.025712009375612688,
-          "relative_l2": 0.002747185270206928
+          "cosine": 0.9999965396138284,
+          "max_absolute": 0.023135088151543748,
+          "relative_l2": 0.0027102827822521143
         },
         "ranges": {
           "gelu_input": [
-            -11.825415557231615,
-            8.437722054302307
+            -11.822964677756408,
+            8.439117456735344
           ],
           "ln1_normalized_variance": [
-            13.42185150806978,
-            35.79859989896021
+            53.679480370319034,
+            85.36548963834767
           ],
           "ln2_normalized_variance": [
-            1.1354547607420578,
-            7.43332573430004
+            51.68335345370109,
+            88.63799827686323
           ],
           "softmax_denominator": [
-            0.06364579637891832,
-            15.843808924754743
+            0.06358986225133356,
+            15.858535106231976
           ],
           "softmax_shifted_logits": [
-            -7.986447366776763,
-            2.7119717778763226
+            -7.986016926934518,
+            2.720264982833913
           ]
         }
       },
       {
         "layer_id": 2,
         "metrics": {
-          "cosine": 0.9999946813470472,
-          "max_absolute": 0.032553716114295916,
-          "relative_l2": 0.0032669219048856875
+          "cosine": 0.999995063441511,
+          "max_absolute": 0.026402858958057607,
+          "relative_l2": 0.003209968791369369
         },
         "ranges": {
           "gelu_input": [
-            -18.59976875033425,
-            52.14020809258102
+            -18.6125707519607,
+            52.15772515852034
           ],
           "ln1_normalized_variance": [
-            13.95060121662069,
-            45.63883205006145
+            45.41716286168661,
+            64.96574865378544
           ],
           "ln2_normalized_variance": [
-            1.0639819326643813,
-            64.28660554664827
+            46.0515797385602,
+            74.65883744377427
           ],
           "softmax_denominator": [
-            0.013164405863243273,
-            76.73250948682391
+            0.013112879348878975,
+            76.27535888036451
           ],
           "softmax_shifted_logits": [
-            -15.067747120327708,
-            4.339600260745062
+            -15.075321045691314,
+            4.333621756562744
           ]
         }
       },
       {
         "layer_id": 3,
         "metrics": {
-          "cosine": 0.9999895783334914,
-          "max_absolute": 0.04591061634941784,
-          "relative_l2": 0.004569260677959954
+          "cosine": 0.9999907114744442,
+          "max_absolute": 0.03792947464574592,
+          "relative_l2": 0.004341529942655493
         },
         "ranges": {
           "gelu_input": [
-            -60.26836542943887,
-            10.122530204387617
+            -60.267448177127235,
+            10.12047621279129
           ],
           "ln1_normalized_variance": [
-            12.6675329190837,
-            41.21021612778427
+            45.911472496028175,
+            82.62656673041245
           ],
           "ln2_normalized_variance": [
-            1.0024529793678243,
-            53.39072363939901
+            53.37484996154999,
+            81.95535344182923
           ],
           "softmax_denominator": [
-            0.03681409764452016,
-            26.732328587358975
+            0.03681096981729437,
+            27.13766793510004
           ],
           "softmax_shifted_logits": [
-            -13.868456651618557,
-            3.2375331945167893
+            -13.875028807437811,
+            3.2530953158306026
           ]
         }
       },
       {
         "layer_id": 4,
         "metrics": {
-          "cosine": 0.9999790872858795,
-          "max_absolute": 0.06572918731104593,
-          "relative_l2": 0.006472339840257425
+          "cosine": 0.9999814480936299,
+          "max_absolute": 0.0570481637659519,
+          "relative_l2": 0.00612507042853847
         },
         "ranges": {
           "gelu_input": [
-            -60.90997840997095,
-            12.149560411899845
+            -60.94863917442944,
+            12.16080737384046
           ],
           "ln1_normalized_variance": [
-            9.79797504408733,
-            41.205698832141266
+            51.63222525744133,
+            82.58803369760435
           ],
           "ln2_normalized_variance": [
-            1.03564465623748,
-            50.491946891162556
+            50.571383012039384,
+            77.75976760356893
           ],
           "softmax_denominator": [
-            0.05545839962958138,
-            18.11372323943258
+            0.05549652912023434,
+            18.112067517689685
           ],
           "softmax_shifted_logits": [
-            -11.412655197227338,
-            2.8953731223051324
+            -11.434987479093078,
+            2.8952812610787735
           ]
         }
       },
       {
         "layer_id": 5,
         "metrics": {
-          "cosine": 0.9999744832790439,
-          "max_absolute": 0.061381486978444144,
-          "relative_l2": 0.007150860864815971
+          "cosine": 0.9999763353252004,
+          "max_absolute": 0.05773242069022633,
+          "relative_l2": 0.006895995716331725
         },
         "ranges": {
           "gelu_input": [
-            -48.94584888737414,
-            11.46827442284909
+            -48.93856985438508,
+            11.468367521754935
           ],
           "ln1_normalized_variance": [
-            8.869476286902845,
-            45.31195604379697
+            45.4114673979457,
+            84.99135479962678
           ],
           "ln2_normalized_variance": [
-            1.0306934621616908,
-            34.16405384616632
+            50.46791876039441,
+            82.93068412412065
           ],
           "softmax_denominator": [
-            0.1780803800922579,
-            5.343450532512705
+            0.17789230107714063,
+            5.389859085212268
           ],
           "softmax_shifted_logits": [
-            -8.513148865018529,
-            1.6730266462200847
+            -8.523407284612299,
+            1.681698576147653
           ]
         }
       },
       {
         "layer_id": 6,
         "metrics": {
-          "cosine": 0.9999707767659259,
-          "max_absolute": 0.0733841048839694,
-          "relative_l2": 0.007656152266571541
+          "cosine": 0.9999723929127488,
+          "max_absolute": 0.06322931320438707,
+          "relative_l2": 0.007471546935630877
         },
         "ranges": {
           "gelu_input": [
-            -25.53782371333585,
-            8.441221771031497
+            -25.52213057785888,
+            8.434113945472824
           ],
           "ln1_normalized_variance": [
-            12.164761720265062,
-            44.41220464028341
+            48.63283214684414,
+            88.91878012356948
           ],
           "ln2_normalized_variance": [
-            1.0119258508240507,
-            22.79737077655154
+            45.530491235309945,
+            80.5532764884045
           ],
           "softmax_denominator": [
-            0.04172275724991148,
-            22.974816996141424
+            0.0417058666851598,
+            22.85787003267466
           ],
           "softmax_shifted_logits": [
-            -7.962183403511881,
-            3.1300383019463913
+            -7.963997321316402,
+            3.124920375898067
           ]
         }
       },
       {
         "layer_id": 7,
         "metrics": {
-          "cosine": 0.9999688076141282,
-          "max_absolute": 0.0836453060087623,
-          "relative_l2": 0.008074879419491554
+          "cosine": 0.9999705805344254,
+          "max_absolute": 0.07417271283831872,
+          "relative_l2": 0.0077610308051309545
         },
         "ranges": {
           "gelu_input": [
-            -17.80605742742762,
-            4.953668822251908
+            -17.81207948620825,
+            4.950664910757361
           ],
           "ln1_normalized_variance": [
-            10.259034970685423,
-            43.443438918945205
+            69.47852259864112,
+            87.02136576532706
           ],
           "ln2_normalized_variance": [
-            1.2138875254751642,
-            14.581905019198166
+            50.58095055434945,
+            77.61961551377833
           ],
           "softmax_denominator": [
-            0.16642613171255416,
-            6.067707229480634
+            0.16639572244553114,
+            6.079770899974453
           ],
           "softmax_shifted_logits": [
-            -8.92032500742443,
-            1.7899726381796448
+            -8.921720774188076,
+            1.7919998706058369
           ]
         }
       },
       {
         "layer_id": 8,
         "metrics": {
-          "cosine": 0.9999614616340301,
-          "max_absolute": 0.08651110120415417,
-          "relative_l2": 0.009226505147424655
+          "cosine": 0.9999628449103055,
+          "max_absolute": 0.0792155914573569,
+          "relative_l2": 0.008842568178826627
         },
         "ranges": {
           "gelu_input": [
-            -14.383706608764756,
-            4.6746562702140135
+            -14.380093770945972,
+            4.674517258758698
           ],
           "ln1_normalized_variance": [
-            8.394744064936432,
-            37.44426836396667
+            63.495126625713745,
+            74.67765508327844
           ],
           "ln2_normalized_variance": [
-            1.4514937080266404,
-            16.586084886401245
+            46.448937246100286,
+            66.31494431910431
           ],
           "softmax_denominator": [
-            0.12338106518789421,
-            7.93921677108049
+            0.12339388728253359,
+            7.947580684033094
           ],
           "softmax_shifted_logits": [
-            -8.756071640122187,
-            2.0503536646540756
+            -8.745449493537345,
+            2.0514438246548585
           ]
         }
       },
       {
         "layer_id": 9,
         "metrics": {
-          "cosine": 0.99995626037816,
-          "max_absolute": 0.09210708091288744,
-          "relative_l2": 0.009445907509012629
+          "cosine": 0.999958489419405,
+          "max_absolute": 0.08430604314163981,
+          "relative_l2": 0.009217773300546498
         },
         "ranges": {
           "gelu_input": [
-            -25.841404602058724,
-            35.386654625226775
+            -25.834861642334758,
+            35.39362296928234
           ],
           "ln1_normalized_variance": [
-            8.115813905548093,
-            42.79262775502206
+            61.17993183582617,
+            85.4113356587975
           ],
           "ln2_normalized_variance": [
-            1.1963944019188164,
-            273.3093936501193
+            47.961079559502785,
+            81.00551446676928
           ],
           "softmax_denominator": [
-            0.09134889689025238,
-            10.983516594880971
+            0.09134617836936537,
+            10.958814559588244
           ],
           "softmax_shifted_logits": [
-            -7.796168138237539,
-            1.9306575710773464
+            -7.788660430576416,
+            1.930076356076933
           ]
         }
       },
       {
         "layer_id": 10,
         "metrics": {
-          "cosine": 0.9999520811410911,
-          "max_absolute": 0.09976871537536036,
-          "relative_l2": 0.00997827288909222
+          "cosine": 0.9999525043195464,
+          "max_absolute": 0.09286962991808734,
+          "relative_l2": 0.009959319663659455
         },
         "ranges": {
           "gelu_input": [
-            -17.219868603401952,
-            122.80584340973375
+            -17.21838733993946,
+            122.77638179497981
           ],
           "ln1_normalized_variance": [
-            3.559282822276061,
-            56.631943333644585
+            49.04372640751758,
+            88.65000348739036
           ],
           "ln2_normalized_variance": [
-            1.2934268747660198,
-            1275.3092456646355
+            49.75842592480486,
+            89.0434461726423
           ],
           "softmax_denominator": [
-            0.01732634499617225,
-            58.60759280282173
+            0.01732770392096422,
+            59.05353591419574
           ],
           "softmax_shifted_logits": [
-            -11.427032878696789,
-            3.87162756026878
+            -11.426986652020592,
+            3.881651282177523
           ]
         }
       },
       {
         "layer_id": 11,
         "metrics": {
-          "cosine": 0.999944942514787,
-          "max_absolute": 0.07618263327099317,
-          "relative_l2": 0.010519199488026413
+          "cosine": 0.9999444226229512,
+          "max_absolute": 0.07050319720197029,
+          "relative_l2": 0.010676974997627438
         },
         "ranges": {
           "gelu_input": [
-            -10.883552280587516,
-            4.5733827847966015
+            -10.881189846419714,
+            4.5746949001868815
           ],
           "ln1_normalized_variance": [
-            1.559921924961595,
-            65.92639994632418
+            49.92469787664196,
+            89.40612388178232
           ],
           "ln2_normalized_variance": [
-            0.7711727874023071,
-            1.2082669228528153
+            49.29154751331137,
+            77.292894643863
           ],
           "softmax_denominator": [
-            0.2576883762380675,
-            4.0088864890907505
+            0.2577619193501891,
+            4.0053717958089825
           ],
           "softmax_shifted_logits": [
-            -7.441480116416211,
-            0.6528106275038921
+            -7.441972511791998,
+            0.6531319499383765
           ]
         }
       }
@@ -484,7 +563,7 @@
       "max_absolute": 0.1,
       "relative_l2": 0.012
     },
-    "worst_relative_l2": 0.010519199488026413
+    "worst_relative_l2": 0.010676974997627438
   },
   "contract_id": "moai-openfhe-bert-base-five-token-encoder-trace-v1",
   "dimensions": {
@@ -1381,7 +1460,7 @@
   "sources": {
     "approximations": {
       "path": "config/openfhe_approximations.json",
-      "sha256": "8735c7a5a79d46e32b00d832f3dc385518ec35c1bae474bc5bc8005da29bd956"
+      "sha256": "9496c3b671b2b2a4ef0174c36468d6345b660a0e6598efe6d88a34a96737fbd2"
     },
     "channel_scales": {
       "path": "config/moai_trace_channel_scales.json",
@@ -1481,6 +1560,20 @@
       "cross_layer": 11,
       "ffn_residual": 12,
       "token_ids_across_layers": 11
+    },
+    "feature_packed_layernorm_scale_registry": {
+      "passed": true,
+      "raw_population_variance_sha256": "940f92de81915c2121b427b72827e4ed87d072fda0847266d0cb5521d60f93b6",
+      "raw_population_variance_shape": [
+        2,
+        12,
+        5
+      ],
+      "registered_matrix_exact_match": true,
+      "runtime_activation_dependency": "none",
+      "selected_scale_values_sha256": "9436f05ce80b427de47700d924869b0dd6f13cc515e586446fcd2dc56faec28a",
+      "selection_formula": "D=2^roundTiesToEven(log2(64/raw_population_variance))",
+      "source": "registered self_before_layernorm/final_before_layernorm residual CSVs only"
     },
     "file_count": 444,
     "passed": true,

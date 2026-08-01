@@ -142,33 +142,31 @@ integration build.
 M4 replays layer 1 from its frozen five-token input at ciphertext level 29. The
 server receives five 1024-slot ciphertexts, public layer weights, and the
 evaluation-key bundle. It performs no decryption and owns no private key or
-plaintext activation. The sealed `attention_output` artifact checkpoint is the
-raw weighted-V value before its native bootstrap and public-prefix cleanup,
-matching the trace boundary consumed by the self projection. The client also
-decrypts and gates the cleaned copy in the same run; it is not aliased over or
-used to hide the raw checkpoint. The remaining sealed checkpoints cover the
-self-attention LayerNorm output, FFN output, and final encoder output.
+plaintext activation. The historical artifact established `attention_output` as the raw
+weighted-V boundary before its native bootstrap and public-prefix cleanup, matching the
+trace boundary consumed by the self projection. A current run must preserve that
+boundary: the client also decrypts and gates the cleaned copy without aliasing over or
+hiding the raw checkpoint. The other output checkpoints cover the self-attention
+LayerNorm output, FFN output, and final encoder output.
 
 The final encrypted output is compared to the single-layer frozen-polynomial
 oracle, not directly to the exact BERT trace. Exact-trace parity remains a
 diagnostic only. The hard gates are `rel-L2 <= 1e-2`, `cosine >= 0.999`, and
-inactive/cross-lane maximum absolute value `<= 1e-6`; none may be relaxed. The
-frozen schedule is input level 29, output level 29, 17 remaining levels, a
-maximum observed level of 45, 25 ciphertext bootstraps, and 50 bootstrap
-iterations. The four client-decrypted artifact checkpoints freeze
-`(level, noise-scale degree, remaining levels)` as `attention_output=(40,2,6)`,
-`self_layernorm_output=(32,2,14)`, `ffn_output=(45,2,1)`, and
-`encoder_output=(29,2,17)`. Every checkpoint has `scale_bits=100`: the runtime
-requires finite `log2(scale)` within `1e-3` of 100, then emits the deterministic
-integer 100 rather than preserving floating-point noise. Their canonical
-metadata SHA-256 is
-`c4c1c85e52154215784b9fa93a584d824dde94a644e5af997882486aac01a6db`.
-Its exact one-layer operation contract is 6300 rotations, 51865 Ct-Pt
-multiplications, 95 Ct-Ct
-multiplications, 800 explicit `ServerRuntime::Rescale` requests, 55 Chebyshev
-evaluations, and 1150 estimated polynomial multiplications. Under the frozen
-`FLEXIBLEAUTO` scaling technique, an explicit rescale request is not claimed to
-be a physical modulus reduction.
+inactive/cross-lane maximum absolute value `<= 1e-6`; none may be relaxed. The current
+depth-12/post-inverse-cleanup graph does not yet have a sealed M4 metadata schedule. The
+reviewed M5 two-layer calibration uses a different layer position and chained-input
+contract, so its layer-0 tuples and counts must not be relabelled as an M4 pass. A new
+five-token server-only M4 run must independently measure and exact-gate its checkpoints,
+operation counts, maximum level, and numerical quality before v5 can be claimed or
+reported as current M4 evidence. Under `FLEXIBLEAUTO`, an explicit rescale request is a
+runtime API count and is not claimed to be a physical modulus reduction.
+
+The M4 client also decrypts the Softmax denominator and both LayerNorm
+normalized-variance checkpoints. All values remain subject to their frozen reciprocal
+or inverse-square-root intervals. The Softmax inactive sentinel keeps the reciprocal
+interval gate. Each LayerNorm inactive guard must be finite and inside `[0.5,1536]`;
+its deviation from one is diagnostic only. The final LayerNorm output inactive tail,
+like the other zero-valued encoded checkpoints, retains the hard `1e-6` gate.
 
 The feature-packed runtime uses two-iteration native OpenFHE bootstrap precision
 14 with a separately hashed 50-bit scaling modulus and 55-bit first modulus;
@@ -192,22 +190,32 @@ bootstrap and then cleaned by one public 768-prefix mask. The three FFN W2 block
 retain ciphertext diagnostic contributions but share one final explicit rescale
 and one public output-bias addition.
 
-After the milestone commit is pushed and the local and remote SHAs match, seal
-the evidence with:
+The v5 schema/runner/validator code contract is aligned with the depth-12 graph. Only
+after a new live M4 run passes, the milestone commit is pushed, and local/remote SHAs
+match should the intended runner be used:
 
 ```bash
 /home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
-  scripts/run_openfhe_encoder_artifact.py
+  scripts/run_openfhe_encoder_artifact_v5.py
 ```
 
-The runner is intentionally M4-only. It fixes the repository data and build
-paths, verifies all 37 layer-1 CSV hashes against this trace contract, performs a
-clean-first build, verifies the OpenFHE 1.5.1 package/linkage, reruns the fast
-contracts, then executes one warm-up plus five measured runs. The fixed binary
-and all 41 frozen inputs are rehashed before and after every execution. Any dirty tree,
-remote SHA mismatch, binary drift, failed child process, threshold violation, or
-artifact-validator rejection removes the unvalidated run directory and returns
-nonzero.
+The versioned v5 runner is intentionally M4-only. The published v2
+schema/runner/validator remain byte-preserved for the historical M4 artifact and must
+not be reinterpreted. The aligned v5 code contract is not new M4 evidence by itself. A
+formal run must fix the repository data and build paths,
+verify all 37 layer-1 CSV hashes, perform a fresh configure and clean-first build,
+verify OpenFHE 1.5.1 package/linkage, rerun the fast contracts, and execute one warm-up
+plus five measured runs. The binary and all frozen inputs must be rehashed before and
+after every execution; any drift or failed gate returns nonzero.
+
+When aligned, the v5 and v6 runners use the same scrubbed subprocess environment for configure,
+build, CTest, `ldd`, workload, and validator execution. Their manifests bind the fresh
+`CMakeCache.txt`, the four OpenFHE CMake package files, a canonical digest over every
+regular file in `include/openfhe`, and the exact resolved
+`libOPENFHE{binfhe,core,pke}.so.1.5.1` files by path, byte count, and SHA-256. They
+rehash this provenance before and after the workload; inherited compiler/linker/include
+flags, a stale toolchain, a changed symlink target, or library/package/header byte drift
+fails closed.
 
 ## M5 encrypted 12-layer gate
 
@@ -224,38 +232,51 @@ also links the client runtime so a client-owned observer can decrypt cloned ciph
 checkpoints and validate them; that composition does not move decryption across the
 server API and is not a claim of operating-system process isolation.
 
-The exact metadata schedule was frozen from the r6 two-layer live calibration. Every
-tuple below is `(level, noise-scale degree, remaining levels, canonical scale bits,
-ciphertext count)`. Runtime `log2(scale)` must be finite and within `1e-3` of the
-canonical value.
+The reviewed live two-layer calibration supplied the original schedule candidate below.
+The approved exact-three run
+`20260801T124248+0900-m5-runnable-prototype-exact3-339daa5-r23` subsequently evaluated
+the second handoff (layer 1 raw output to layer 2 refreshed input), rechecked the
+later-layer tuple at layer 2, and transitioned the profile to `sealed_exact3`. The
+shortened evidence remains `artifact_eligible=false`: it seals only the schedule
+prerequisite and cannot establish M5 completion. Exact one and exact two can never claim
+the schedule is sealed. Every tuple below is `(level, noise-scale degree, remaining
+levels, canonical scale bits, ciphertext count)`. Runtime `log2(scale)` must be finite
+and within `1e-3` of the canonical value.
 
 | Position | Layer 0 | Layers 1-11 |
 |---|---|---|
 | Layer input | `(29,1,18,50,5)` | `(19,2,27,100,5)` |
 | Softmax denominator after bootstrap | `(18,2,28,100,5)` | `(18,2,28,100,5)` |
-| Attention LayerNorm variance after bootstrap | `(18,2,28,100,5)` | `(18,2,28,100,5)` |
-| Output LayerNorm variance after bootstrap | `(18,2,28,100,5)` | `(18,2,28,100,5)` |
+| Attention LayerNorm variance after bootstrap restore | `(19,2,27,100,5)` | `(19,2,27,100,5)` |
+| Output LayerNorm variance after bootstrap restore | `(19,2,27,100,5)` | `(19,2,27,100,5)` |
 | Raw attention output | `(40,2,6,100,5)` | `(31,2,15,100,5)` |
-| First LayerNorm output | `(32,2,14,100,5)` | `(29,2,17,100,5)` |
-| FFN output projection | `(45,2,1,100,5)` | `(42,2,4,100,5)` |
-| Raw encoder output | `(29,2,17,100,5)` | `(29,2,17,100,5)` |
+| First LayerNorm output | `(32,2,14,100,5)` | `(30,2,16,100,5)` |
+| FFN output projection | `(45,2,1,100,5)` | `(43,2,3,100,5)` |
+| Raw encoder output | `(30,2,16,100,5)` | `(30,2,16,100,5)` |
 
-The depth-47 schedule consumes 12 used levels from each layer input to raw attention,
-14 levels from the layer-0 first-LayerNorm polynomial checkpoint to its output and 11
-thereafter, 13 levels from first LayerNorm output through the FFN projection, and 11
-levels from the second-LayerNorm polynomial checkpoint to raw output. Every inter-layer
-refresh recovers 10 used levels. The production encoder checks the complete
+The relative used-level delta tuple is ordered as input-to-Softmax recovery,
+Softmax-to-raw-attention consumption, raw-attention-to-LN1 recovery,
+LN1-checkpoint-to-LN1-output consumption, LN1-output-to-FFN consumption,
+FFN-to-LN2 recovery, LN2-checkpoint-to-raw-output consumption, and
+previous-raw-output-to-refreshed-input recovery. It is
+`(10,22,21,13,13,26,11,null)` for layer 0 and
+`(1,13,12,11,13,24,11,11)` for the candidate later regime. The exact path fails
+closed on these position-specific tuples and deltas; only the explicitly diagnostic
+calibration mode remains permissive for collecting new live evidence. Every candidate
+inter-layer refresh recovers 11 used levels. The production encoder checks the complete
 `(19,2,27,2^100,5)` handoff before starting every later layer, even when no diagnostic
 observer is attached.
 
-Each layer freezes the operation tuple below; each of the first 11 post-layer refreshes
-freezes the second tuple. Counts are exact, not upper bounds:
+The live two-layer output measured the per-layer, per-refresh, and cumulative candidate
+counts below. The 12-layer row is a deterministic projection of those candidates, not
+executed full-chain evidence:
 
 | Scope | Rotations | Ct-Pt mul | Ct-Ct mul | Rescale requests | Chebyshev evals | Estimated polynomial mul | Bootstraps | Bootstrap iterations |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| One encoder layer | 6300 | 51865 | 95 | 800 | 55 | 1150 | 25 | 50 |
+| One encoder layer | 6300 | 51885 | 95 | 810 | 55 | 1150 | 25 | 50 |
 | One inter-layer refresh | 0 | 5 | 0 | 5 | 0 | 0 | 5 | 10 |
-| Formal 12-layer total | 75600 | 622435 | 1140 | 9655 | 660 | 13800 | 355 | 710 |
+| Observed two-layer cumulative | 12600 | 103775 | 190 | 1625 | 110 | 2300 | 55 | 110 |
+| Projected 12-layer total | 75600 | 622675 | 1140 | 9775 | 660 | 13800 | 355 | 710 |
 
 The client validates every encrypted layer input and output against the corresponding
 chained frozen-polynomial oracle and also gates the exact-trace diagnostic. Every such
@@ -270,8 +291,14 @@ cleanup, `self_projection`, `attention_residual`, `attention_layernorm`,
 `encoder_output`. Each of the three FFN blocks additionally contributes
 `intermediate_pre_activation_i`, `intermediate_polynomial_output_i`,
 `intermediate_activation_i`, and `output_contribution_i`. Missing, extra, or duplicate
-labels fail closed. Their encoded inactive/cross-lane maximum absolute value must be
-`<= 1e-6`. The 16 base tensors and three `output_contribution_i` tensors freeze active
+labels fail closed. Under the user-authorized
+`moai_observability_compatible_prototype_v1` contract, their encoded
+inactive/cross-lane maximum absolute value must be `<= 1e-3`. This threshold applies
+only to M5 exact-three and full-12 runtime hygiene; M2 packing, M3 nonlinear, and M4
+single-layer gates remain at `1e-6`. Legacy MOAI did not assert or report an inactive
+threshold, so `1e-3` is a new prototype engineering bound rather than a claimed MOAI
+value or strict numerical-parity criterion. The 16 base tensors and three
+`output_contribution_i` tensors freeze active
 width 768; the other nine intermediate tensors freeze active width 1024. A wrong width
 fails closed. The nine full-width tensors have an empty encoded inactive tail, so their
 presence proves registry completeness but is not evidence about physical CKKS slots
@@ -279,26 +306,57 @@ beyond the 1024 encoded values. This contract does not claim inspection of the u
 remainder of the 32768-slot ring capacity.
 
 The Softmax denominator and the two LayerNorm normalized-variance tensors are three
-separate public value-one sentinel channels. Their actual inactive values must remain
+separate public sentinel channels. Their actual inactive values must remain finite and
 inside the corresponding frozen reciprocal or inverse-square-root interval. Deviation
 from one is recorded as a diagnostic maximum and is not required to satisfy the
-zero-inactive `1e-6` threshold.
+zero-inactive M5 prototype threshold. For both LayerNorm sites, the active public epsilon is
+multiplied by the selected public trace-scale factor `D` and added before native
+bootstrap. The variance branch is preconditioned by 2048: active slots carry `u/2048`,
+and inactive guard slots carry `1/2048`. After bootstrap, one uniform public
+multiplication restores all 1024 slots by 2048 before inverse-square-root evaluation.
+
+After the inverse-square-root polynomial, one public first-768-active/last-256-zero
+Ct-Pt mask and one explicit `ServerRuntime::Rescale` clean the inverse branch before the
+centered Ct-Ct merge. The centered branch receives the per-token public
+`gamma*sqrt(D)` Ct-Pt factor. The post-bootstrap required depth is 12. This is reflected
+in the candidate per-layer count of 51885 Ct-Pt multiplications and 810 explicit
+rescale requests. Weighted-V cleanup and each of the 11 inter-layer refreshes still use
+one public 768-prefix mask. The restored LayerNorm inactive guard has only the finite
+`[0.5,1536]` interval hard gate; deviation from one is diagnostic. The final LayerNorm
+output inactive tail remains part of the encoded zero-valued M5 prototype gate.
 
 The plaintext preflight proves only fixture/oracle consistency and negative API
-contracts. Metadata calibration and exact two-layer prefix modes are explicitly marked
-`artifact_eligible=false`; their stdout cannot be mixed into a formal artifact. The
-formal CTest must execute all 12 layers from a clean milestone commit. After that commit
-is pushed and the local, tracking, and live remote SHAs agree, run:
+contracts. Metadata calibration and every shortened exact-prefix mode are explicitly
+marked `artifact_eligible=false`; their stdout cannot be mixed into a formal artifact.
+The registered `openfhe_encoder_3_layer_exact_smoke` CTest is the minimum schedule
+sealing diagnostic because it validates the second handoff and the later steady-state
+regime. Exact one and exact two always report `formal_schedule_sealed=false`; exact three
+may report true only in its successful final summary. The approved exact-three run above
+has passed and is bound by the profile. The live M4 regression and formal 12-layer
+prototype CTest remain independent required gates.
+
+```bash
+ctest --test-dir build-openfhe --output-on-failure \
+  -R '^openfhe_encoder_3_layer_exact_smoke$'
+```
+
+The v6 runner/schema/validator code contract is aligned with the sealed tuple/counts,
+the exact-three evidence binding, and the M5 prototype threshold. The exact-three
+prerequisite is satisfied; M5 still lacks milestone evidence until live M4 and full
+12-layer prototype validation pass, the milestone commit is pushed, and the local,
+tracking, and live remote SHAs agree. The M5 entry point is:
 
 ```bash
 /home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
-  scripts/run_openfhe_encoder12_artifact.py
+  scripts/run_openfhe_encoder12_artifact_v6.py
 ```
 
-The M5 runner performs one untimed-claim correctness execution, binds all 448 frozen
-inputs plus the executable by SHA-256 before and after the run, requires the exact 12
+The versioned v6 M5 runner performs one untimed-claim prototype execution, binds all
+frozen inputs plus the executable by SHA-256 before and after the run, requires 12
 position-specific metadata/count records, and invokes the independent schema and
-semantic validator. It does not perform the M6 one-warm-up/five-repeat benchmark and
-must emit `timing_claim=false`. A shortened diagnostic, a calibration run, a dirty-tree
-run, a remote-SHA mismatch, an input or binary hash drift, or any threshold/schema
-failure is not M5 evidence.
+semantic validator. Those artifact-side contracts are aligned, but no passing
+full12-plus-validator milestone artifact has yet been produced. The M4 intermediate
+gates must still pass before the full ciphertext chain starts; the 12-layer output gate
+is not a substitute for that regression. The runner must emit `timing_claim=false`. A shortened diagnostic,
+calibration run, dirty-tree run, remote-SHA mismatch, input or binary hash drift, or any
+threshold/schema failure is not M5 evidence.
