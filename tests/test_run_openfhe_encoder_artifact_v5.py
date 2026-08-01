@@ -276,6 +276,10 @@ class EncoderArtifactV5RunnerTest(unittest.TestCase):
             ],
         )
         self.assertEqual(command[cmake_index + 1], "--fresh")
+        self.assertIn(
+            f"-DCMAKE_CXX_COMPILER:FILEPATH={runner.SYSTEM_CXX}",
+            command,
+        )
         self.assertIn("-DCMAKE_CXX_FLAGS:STRING=", command)
         self.assertIn("-DCMAKE_EXE_LINKER_FLAGS:STRING=", command)
 
@@ -728,7 +732,22 @@ class EncoderArtifactV5RunnerTest(unittest.TestCase):
                         runner._trace_scale_contract_provenance()
 
     def test_unsealed_schedule_stops_before_git_build_or_he(self) -> None:
+        unsealed_profile = {
+            "feature_packed_layernorm_override": {
+                "schedule_status": "two_layer_live_candidate_requires_exact_three"
+            }
+        }
         with (
+            mock.patch.object(
+                runner,
+                "_trace_scale_contract_provenance",
+                return_value={},
+            ),
+            mock.patch.object(
+                runner,
+                "_load_json",
+                return_value=unsealed_profile,
+            ),
             mock.patch.object(runner, "_preflight_git") as preflight_git,
             mock.patch.object(runner, "_run_m4_preflight") as build_preflight,
             mock.patch.object(runner, "_run_once") as run_once,
@@ -841,6 +860,8 @@ class EncoderArtifactV5RunnerTest(unittest.TestCase):
             def write_cache(
                 *,
                 cxx_flags: str = "",
+                compiler_type: str = "STRING",
+                compiler: Path = runner.SYSTEM_CXX,
                 source_root: Path = runner.REPO_ROOT,
                 extra: str = "",
             ) -> None:
@@ -850,7 +871,7 @@ class EncoderArtifactV5RunnerTest(unittest.TestCase):
                     "CMAKE_BUILD_TYPE:STRING=Release",
                     "BUILD_TESTING:BOOL=ON",
                     f"OpenFHE_DIR:PATH={package_root}",
-                    f"CMAKE_CXX_COMPILER:FILEPATH={runner.SYSTEM_CXX}",
+                    f"CMAKE_CXX_COMPILER:{compiler_type}={compiler}",
                     f"CMAKE_MAKE_PROGRAM:FILEPATH={runner.SYSTEM_MAKE}",
                     f"CMAKE_CXX_FLAGS:STRING={cxx_flags}",
                     "CMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG",
@@ -881,6 +902,20 @@ class EncoderArtifactV5RunnerTest(unittest.TestCase):
                     record["forced_environment_variables"],
                     runner.FORCED_SUBPROCESS_ENVIRONMENT,
                 )
+
+                write_cache(compiler_type="FILEPATH")
+                with self.assertRaisesRegex(
+                    runner.ArtifactRunnerError,
+                    "CMake cache binding drifted",
+                ):
+                    runner._verify_build_configuration(build_root, prefix)
+
+                write_cache(compiler=Path("/tmp/injected-c++"))
+                with self.assertRaisesRegex(
+                    runner.ArtifactRunnerError,
+                    "CMake cache binding drifted",
+                ):
+                    runner._verify_build_configuration(build_root, prefix)
 
                 write_cache(cxx_flags="-march=native")
                 with self.assertRaisesRegex(

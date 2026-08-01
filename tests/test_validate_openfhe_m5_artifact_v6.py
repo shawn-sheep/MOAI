@@ -1525,6 +1525,52 @@ class M5ArtifactValidatorContractTest(unittest.TestCase):
                         self.schema,
                     )
 
+    def test_cmake_cache_requires_cmake_normalized_compiler_type(self) -> None:
+        cache_path = self.output_root / "CMakeCache.txt"
+
+        def write_cache(
+            compiler_type: str,
+            compiler: Path = validator.SYSTEM_CXX,
+        ) -> None:
+            cache_path.write_text(
+                "\n".join(
+                    [
+                        "CMAKE_GENERATOR:INTERNAL=Unix Makefiles",
+                        f"CMAKE_HOME_DIRECTORY:INTERNAL={validator.REPO_ROOT}",
+                        "CMAKE_BUILD_TYPE:STRING=Release",
+                        "BUILD_TESTING:BOOL=ON",
+                        "OpenFHE_DIR:PATH="
+                        f"{validator.OPENFHE_PREFIX / 'lib' / 'OpenFHE'}",
+                        f"CMAKE_CXX_COMPILER:{compiler_type}={compiler}",
+                        f"CMAKE_MAKE_PROGRAM:FILEPATH={validator.SYSTEM_MAKE}",
+                        "CMAKE_CXX_FLAGS:STRING=",
+                        "CMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG",
+                        "CMAKE_EXE_LINKER_FLAGS:STRING=",
+                        "CMAKE_EXE_LINKER_FLAGS_RELEASE:STRING=",
+                        "CMAKE_SHARED_LINKER_FLAGS:STRING=",
+                        "CMAKE_MODULE_LINKER_FLAGS:STRING=",
+                        "CMAKE_STATIC_LINKER_FLAGS:STRING=",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+        write_cache("STRING")
+        validator._verify_cmake_cache(cache_path)
+        write_cache("FILEPATH")
+        with self.assertRaisesRegex(
+            validator.ValidationError,
+            "CMake cache build configuration drifted",
+        ):
+            validator._verify_cmake_cache(cache_path)
+        write_cache("STRING", Path("/tmp/injected-c++"))
+        with self.assertRaisesRegex(
+            validator.ValidationError,
+            "CMake cache build configuration drifted",
+        ):
+            validator._verify_cmake_cache(cache_path)
+
     def test_schema_binding_freezes_v6_and_retires_v4_draft(self) -> None:
         binding = self.manifest["schema_binding"]
         self.assertEqual(

@@ -2578,6 +2578,10 @@ class M5ArtifactRunnerTests(unittest.TestCase):
         )
         self.assertEqual(command[cmake_index + 1], "--fresh")
         self.assertEqual(command.count("--fresh"), 1)
+        self.assertIn(
+            f"-DCMAKE_CXX_COMPILER:FILEPATH={runner.SYSTEM_CXX}",
+            command,
+        )
         self.assertIn("-DCMAKE_CXX_FLAGS:STRING=", command)
         self.assertIn(
             "-DCMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG",
@@ -2731,6 +2735,8 @@ class M5ArtifactRunnerTests(unittest.TestCase):
         def write_cache(
             *,
             cxx_flags: str = "",
+            compiler_type: str = "STRING",
+            compiler: Path = runner.SYSTEM_CXX,
             home: Path = runner.REPO_ROOT,
             extra: str = "",
         ) -> None:
@@ -2740,7 +2746,7 @@ class M5ArtifactRunnerTests(unittest.TestCase):
                 "CMAKE_BUILD_TYPE:STRING=Release",
                 "BUILD_TESTING:BOOL=ON",
                 f"OpenFHE_DIR:PATH={package_root}",
-                f"CMAKE_CXX_COMPILER:FILEPATH={runner.SYSTEM_CXX}",
+                f"CMAKE_CXX_COMPILER:{compiler_type}={compiler}",
                 f"CMAKE_MAKE_PROGRAM:FILEPATH={runner.SYSTEM_MAKE}",
                 f"CMAKE_CXX_FLAGS:STRING={cxx_flags}",
                 "CMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG",
@@ -2763,6 +2769,20 @@ class M5ArtifactRunnerTests(unittest.TestCase):
         ):
             write_cache()
             runner._verify_build_configuration(build_root, prefix)
+
+            write_cache(compiler_type="FILEPATH")
+            with self.assertRaisesRegex(
+                runner.ArtifactRunnerError,
+                "CMake cache binding drifted",
+            ):
+                runner._verify_build_configuration(build_root, prefix)
+
+            write_cache(compiler=Path("/tmp/injected-c++"))
+            with self.assertRaisesRegex(
+                runner.ArtifactRunnerError,
+                "CMake cache binding drifted",
+            ):
+                runner._verify_build_configuration(build_root, prefix)
 
             write_cache(cxx_flags="-march=native")
             with self.assertRaisesRegex(

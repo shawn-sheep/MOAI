@@ -729,6 +729,53 @@ class M4ArtifactV5ValidatorTest(unittest.TestCase):
                 with self.assertRaises(validator.ValidationError):
                     validator.validate_instance(tampered, schema, self.schema)
 
+    def test_cmake_cache_requires_cmake_normalized_compiler_type(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="moai-m4-v5-cache-") as directory:
+            cache_path = Path(directory) / "CMakeCache.txt"
+
+            def write_cache(
+                compiler_type: str,
+                compiler: Path = validator.SYSTEM_CXX,
+            ) -> None:
+                cache_path.write_text(
+                    "\n".join(
+                        [
+                            "CMAKE_GENERATOR:INTERNAL=Unix Makefiles",
+                            f"CMAKE_HOME_DIRECTORY:INTERNAL={validator.REPO_ROOT}",
+                            "CMAKE_BUILD_TYPE:STRING=Release",
+                            "BUILD_TESTING:BOOL=ON",
+                            "OpenFHE_DIR:PATH="
+                            f"{validator.OPENFHE_PREFIX / 'lib' / 'OpenFHE'}",
+                            f"CMAKE_CXX_COMPILER:{compiler_type}={compiler}",
+                            f"CMAKE_MAKE_PROGRAM:FILEPATH={validator.SYSTEM_MAKE}",
+                            "CMAKE_CXX_FLAGS:STRING=",
+                            "CMAKE_CXX_FLAGS_RELEASE:STRING=-O3 -DNDEBUG",
+                            "CMAKE_EXE_LINKER_FLAGS:STRING=",
+                            "CMAKE_EXE_LINKER_FLAGS_RELEASE:STRING=",
+                            "CMAKE_SHARED_LINKER_FLAGS:STRING=",
+                            "CMAKE_MODULE_LINKER_FLAGS:STRING=",
+                            "CMAKE_STATIC_LINKER_FLAGS:STRING=",
+                        ]
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+            write_cache("STRING")
+            validator._verify_cmake_cache(cache_path)
+            write_cache("FILEPATH")
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "CMake cache build configuration drifted",
+            ):
+                validator._verify_cmake_cache(cache_path)
+            write_cache("STRING", Path("/tmp/injected-c++"))
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "CMake cache build configuration drifted",
+            ):
+                validator._verify_cmake_cache(cache_path)
+
     def test_narrow_ctest_contract_is_frozen_and_exact(self) -> None:
         expected = (
             "openfhe_m4_v5_artifact_schema_contract",
@@ -1228,11 +1275,21 @@ class M4ArtifactV5ValidatorTest(unittest.TestCase):
             )
 
     def test_unsealed_profile_schedule_is_rejected(self) -> None:
-        with self.assertRaisesRegex(
-            validator.ValidationError,
-            "metadata schedule is not sealed",
+        unsealed_profile = {
+            "feature_packed_layernorm_override": {
+                "schedule_status": "two_layer_live_candidate_requires_exact_three"
+            }
+        }
+        with mock.patch.object(
+            validator,
+            "load_json",
+            return_value=unsealed_profile,
         ):
-            validator._require_m4_schedule_sealed(REPO_ROOT)
+            with self.assertRaisesRegex(
+                validator.ValidationError,
+                "metadata schedule is not sealed",
+            ):
+                validator._require_m4_schedule_sealed(REPO_ROOT)
 
     def test_schema_binding_shape_and_hash_tamper(self) -> None:
         binding = {

@@ -1207,7 +1207,9 @@ def _verify_build_configuration(
         "CMAKE_BUILD_TYPE": ("STRING", "Release"),
         "BUILD_TESTING": ("BOOL", "ON"),
         "OpenFHE_DIR": ("PATH", str(prefix / "lib" / "OpenFHE")),
-        "CMAKE_CXX_COMPILER": ("FILEPATH", str(SYSTEM_CXX)),
+        # CMake normalizes this known cache entry from the command-line
+        # FILEPATH hint to STRING while project(... LANGUAGES CXX) initializes.
+        "CMAKE_CXX_COMPILER": ("STRING", str(SYSTEM_CXX)),
         "CMAKE_MAKE_PROGRAM": ("FILEPATH", str(SYSTEM_MAKE)),
         "CMAKE_CXX_FLAGS": ("STRING", ""),
         "CMAKE_CXX_FLAGS_RELEASE": ("STRING", "-O3 -DNDEBUG"),
