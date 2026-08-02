@@ -3,8 +3,8 @@
 
 The runner accepts only a clean, pushed ``refactor/openfhe-cpu`` commit.  It
 verifies the frozen M5 r27 prerequisite, performs a fresh fixed build and narrow
-CTest preflight, then launches six independent 12-layer processes: one warm-up
-and five measured samples.  M5 evidence code is imported but never modified.
+CTest preflight, then launches two independent 12-layer processes: one warm-up
+and one measured sample.  M5 evidence code is imported but never modified.
 """
 
 from __future__ import annotations
@@ -82,10 +82,12 @@ M5_DECISION = "PASS_M5_RUNNABLE_PROTOTYPE"
 M5_VERDICT = "GO_PROTOTYPE"
 
 WARMUP_COUNT = 1
-MEASURED_COUNT = 5
+MEASURED_COUNT = 1
 TOKEN_COUNT = 5
 ENCODER_LAYERS = 12
 EXTERNAL_WALL_TOLERANCE_MS = 100.0
+PRE_RUNTIME_COMMAND_COUNT = 11
+TOTAL_COMMAND_COUNT = PRE_RUNTIME_COMMAND_COUNT + WARMUP_COUNT + MEASURED_COUNT + 1
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+:-]{0,127}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
@@ -169,13 +171,14 @@ ARTIFACT_LAYOUT = (
 )
 CHECKSUM_PATHS = tuple(item[0] for item in ARTIFACT_LAYOUT[:-1])
 CLAIM_BOUNDARY = (
-    "OpenFHE CKKS CPU server-only 12-layer encoder trace replay benchmark only.",
+    "OpenFHE CKKS CPU server-only 12-layer encoder trace replay single-sample timing only.",
     "paper_compat uses security_claim=none; no 128-bit security claim.",
     "Five fixed trace tokens are one packed batch, not five task-level samples.",
     "No tokenizer, classifier, task accuracy, or task-level end-to-end inference claim.",
     "No GPU, MOAI_GPU, Discrete CKKS, FBT, or QDQ claim.",
     "Legacy SEAL was not run and is noncomparable under the fixed benchmark contract.",
     "No SEAL speedup is computed or claimed.",
+    "One measured execution is a single timing observation, not a repeatability or dispersion estimate.",
 )
 
 
@@ -212,6 +215,13 @@ class ExecutedSample:
             "external_wall_seconds": self.external_wall_seconds,
             "external_peak_rss_bytes": self.external_peak_rss_bytes,
         }
+
+
+def _expected_phases() -> list[tuple[str, int]]:
+    return [
+        ("warmup", 0),
+        *(("measured", index) for index in range(1, MEASURED_COUNT + 1)),
+    ]
 
 
 def _timestamp() -> str:
@@ -513,7 +523,9 @@ def _extract_unique_sample(stdout: str, label: str) -> dict[str, Any]:
 
 def _summary(values: list[float]) -> dict[str, Any]:
     if len(values) != MEASURED_COUNT or any(not math.isfinite(value) or value < 0 for value in values):
-        raise BenchmarkRunnerError("statistics require exactly five finite nonnegative samples")
+        raise BenchmarkRunnerError(
+            f"statistics require exactly {MEASURED_COUNT} finite nonnegative sample"
+        )
     median = float(statistics.median(values))
     return {
         "samples": list(values),
@@ -533,14 +545,16 @@ def _timing_summary(values: list[float]) -> dict[str, Any]:
 
 def _metrics(measured: list[ExecutedSample]) -> dict[str, Any]:
     if len(measured) != MEASURED_COUNT:
-        raise BenchmarkRunnerError("M6 requires exactly five measured samples")
+        raise BenchmarkRunnerError(
+            f"M6 requires exactly {MEASURED_COUNT} measured sample"
+        )
     samples = [item.sample for item in measured]
     sizes = samples[0]["serialized_sizes"]
     counts = samples[0]["operation_counts"]
     if any(item["serialized_sizes"] != sizes for item in samples[1:]):
-        raise BenchmarkRunnerError("five measured serialized-size records differ")
+        raise BenchmarkRunnerError("measured serialized-size records differ")
     if any(item["operation_counts"] != counts for item in samples[1:]):
-        raise BenchmarkRunnerError("five measured operation-count records differ")
+        raise BenchmarkRunnerError("measured operation-count records differ")
     timing = {
         key: _timing_summary([float(sample["timing_ms"][key]) for sample in samples])
         for key in TIMING_FIELDS
@@ -564,6 +578,21 @@ def _metrics(measured: list[ExecutedSample]) -> dict[str, Any]:
         "operation_counts": counts,
         "correctness": correctness,
     }
+
+
+def _require_cross_process_static_contract(samples: list[ExecutedSample]) -> None:
+    if [(item.phase, item.index) for item in samples] != _expected_phases():
+        raise BenchmarkRunnerError("M6 warm-up/measured process order drifted")
+    baseline = samples[0].sample
+    for item in samples[1:]:
+        if item.sample["serialized_sizes"] != baseline["serialized_sizes"]:
+            raise BenchmarkRunnerError(
+                "warm-up and measured serialized-size records differ"
+            )
+        if item.sample["operation_counts"] != baseline["operation_counts"]:
+            raise BenchmarkRunnerError(
+                "warm-up and measured operation-count records differ"
+            )
 
 
 def _artifact_environment() -> dict[str, str]:
@@ -766,7 +795,7 @@ def _run_m6_preflight(
 
 
 def _runtime_command(config: RunnerConfig, resource_path: Path, phase: str, index: int) -> list[str]:
-    if phase not in {"warmup", "measured"} or index < 0 or index > MEASURED_COUNT:
+    if (phase, index) not in _expected_phases():
         raise BenchmarkRunnerError("invalid M6 sample phase/index")
     return [
         str(TIME_EXECUTABLE),
@@ -1084,7 +1113,7 @@ def generate_artifact(config: RunnerConfig) -> Path:
                 "forced": dict(FORCED_THREAD_ENVIRONMENT),
                 "cleared_inherited_variables": list(cleared_thread_environment),
                 "applies_to": (
-                    "configure, build, CTest, warm-up, measured samples, validator"
+                    "configure, build, CTest, warm-up, measured sample, validator"
                 ),
             },
         }
@@ -1096,7 +1125,7 @@ def generate_artifact(config: RunnerConfig) -> Path:
         }
         _progress(active_phase, active_index, "success")
 
-        for phase, index in (("warmup", 0), *( ("measured", i) for i in range(1, 6) )):
+        for phase, index in _expected_phases():
             active_phase = phase
             active_index = index
             _progress(active_phase, active_index, "begin")
@@ -1121,6 +1150,7 @@ def generate_artifact(config: RunnerConfig) -> Path:
             _refresh_partial_logs(staging, all_samples)
             _remove_phase_raw(staging, phase, index)
             _progress(active_phase, active_index, "success")
+        _require_cross_process_static_contract(all_samples)
         warmup = all_samples[0]
         measured = all_samples[1:]
         metrics = _metrics(measured)
@@ -1150,9 +1180,10 @@ def generate_artifact(config: RunnerConfig) -> Path:
             *(item.command for item in all_samples),
             _command_record(validator_argv, 0),
         ]
-        if len(commands) != 18:
+        if len(commands) != TOTAL_COMMAND_COUNT:
             raise BenchmarkRunnerError(
-                f"M6 command contract must contain 18 records, got {len(commands)}"
+                "M6 command contract must contain "
+                f"{TOTAL_COMMAND_COUNT} records, got {len(commands)}"
             )
         manifest = {
             "schema_version": SCHEMA_VERSION,
@@ -1187,7 +1218,7 @@ def generate_artifact(config: RunnerConfig) -> Path:
                 "independent_processes": True,
                 "token_count": TOKEN_COUNT,
                 "encoder_layers": ENCODER_LAYERS,
-                "timing_kind": "benchmark",
+                "timing_kind": "single_sample_measurement",
             },
             "preflight": preflight_record,
             "commands": commands,
@@ -1201,16 +1232,16 @@ def generate_artifact(config: RunnerConfig) -> Path:
             "comparison": _seal_comparison(),
             "gate": {
                 "passed": True,
-                "decision": "PASS_M6_OPENFHE_BENCHMARK",
+                "decision": "PASS_M6_SINGLE_SAMPLE_MEASUREMENT",
                 "checks": {
                     "git": "PASS",
                     "m5_prerequisite": "PASS",
                     "build": "PASS",
                     "narrow_ctest": "PASS",
-                    "repeat_contract": "PASS",
+                    "sample_count_contract": "PASS_ONE_WARMUP_ONE_MEASURED",
                     "correctness": "PASS",
                     "bytes_and_counts": "PASS",
-                    "statistics": "PASS",
+                    "single_sample_summary": "PASS_NO_DISPERSION_CLAIM",
                     "artifact_integrity": "PASS",
                     "seal_comparability": "PASS_NONCOMPARABLE",
                 },
@@ -1220,7 +1251,7 @@ def generate_artifact(config: RunnerConfig) -> Path:
                 for name, role, media_type in ARTIFACT_LAYOUT
             ],
             "claim_boundary": list(CLAIM_BOUNDARY),
-            "verdict": "GO_M6_OPENFHE_BENCHMARK",
+            "verdict": "GO_M6_SINGLE_SAMPLE_EVIDENCE",
         }
         _atomic_write(
             staging / "manifest.json",

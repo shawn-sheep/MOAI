@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused unit tests for the M6 benchmark runner contract."""
+"""Focused unit tests for the M6 single-sample timing runner contract."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import json
 import sys
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -188,44 +189,52 @@ class BenchmarkSampleTests(unittest.TestCase):
             runner._extract_unique_sample(duplicated + "\n", "unit")
 
 
-class StatisticsAndRepeatTests(unittest.TestCase):
-    def test_median_mad_and_token_amortization(self) -> None:
-        result = runner._timing_summary([1.0, 2.0, 3.0, 4.0, 100.0])
+class SingleSampleSummaryTests(unittest.TestCase):
+    def test_single_sample_summary_and_token_amortization(self) -> None:
+        result = runner._timing_summary([3.0])
         self.assertEqual(result["batch"]["median"], 3.0)
-        self.assertEqual(result["batch"]["mad"], 1.0)
+        self.assertEqual(result["batch"]["mad"], 0.0)
+        self.assertEqual(result["batch"]["minimum"], 3.0)
+        self.assertEqual(result["batch"]["maximum"], 3.0)
         self.assertEqual(result["amortized_per_token"]["median"], 0.6)
 
-    def test_metrics_require_five_measured_samples(self) -> None:
-        with self.assertRaisesRegex(runner.BenchmarkRunnerError, "exactly five"):
-            runner._metrics([executed(index) for index in range(1, 5)])
+    def test_metrics_require_exactly_one_measured_sample(self) -> None:
+        with self.assertRaisesRegex(runner.BenchmarkRunnerError, "exactly 1"):
+            runner._metrics([])
+        with self.assertRaisesRegex(runner.BenchmarkRunnerError, "exactly 1"):
+            runner._metrics([executed(1), executed(2)])
 
-    def test_metrics_freeze_bytes_and_counts_across_five(self) -> None:
-        records = [executed(index) for index in range(1, 6)]
+    def test_metrics_report_one_measured_sample(self) -> None:
+        records = [executed(1)]
         metrics = runner._metrics(records)
-        self.assertEqual(metrics["measured_count"], 5)
+        self.assertEqual(metrics["measured_count"], 1)
         self.assertEqual(metrics["operation_counts"], runner.EXPECTED_COUNTS)
-        records[4].sample["serialized_sizes"]["final_output"][  # type: ignore[index]
+
+    def test_warmup_and_measured_static_records_must_match(self) -> None:
+        warmup = replace(executed(0), phase="warmup")
+        measured = executed(1)
+        runner._require_cross_process_static_contract([warmup, measured])
+        measured.sample["serialized_sizes"]["final_output"][  # type: ignore[index]
             "ciphertext_component_sum_bytes"
         ] += 1
         with self.assertRaisesRegex(runner.BenchmarkRunnerError, "serialized-size"):
-            runner._metrics(records)
+            runner._require_cross_process_static_contract([warmup, measured])
 
     def test_runtime_commands_are_independent_benchmark_processes(self) -> None:
         config = runner.RunnerConfig(run_id="unit")
         warmup = runner._runtime_command(config, Path("/tmp/warmup.time"), "warmup", 0)
-        measured = [
-            runner._runtime_command(
-                config,
-                Path(f"/tmp/measured-{index}.time"),
-                "measured",
-                index,
-            )
-            for index in range(1, 6)
-        ]
+        measured = runner._runtime_command(
+            config,
+            Path("/tmp/measured-1.time"),
+            "measured",
+            1,
+        )
         self.assertEqual(warmup[-1], "--benchmark-sample")
-        self.assertEqual(len(measured), 5)
-        self.assertEqual(len({tuple(command) for command in measured}), 5)
-        self.assertTrue(all(command[0] == "/usr/bin/time" for command in measured))
+        self.assertEqual(measured[-1], "--benchmark-sample")
+        self.assertNotEqual(warmup, measured)
+        self.assertEqual(measured[0], "/usr/bin/time")
+        with self.assertRaisesRegex(runner.BenchmarkRunnerError, "phase/index"):
+            runner._runtime_command(config, Path("/tmp/invalid.time"), "measured", 0)
 
     def test_failure_artifact_is_preserved_and_ineligible(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

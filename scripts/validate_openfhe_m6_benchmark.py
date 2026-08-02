@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independently validate MOAI OpenFHE M6 benchmark schema and artifacts."""
+"""Independently validate MOAI OpenFHE M6 single-sample timing artifacts."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ OUTPUT_ROOT = REPO_ROOT / "results" / "openfhe"
 SYSTEM_GIT = Path("/usr/bin/git")
 SCHEMA_URI = "https://json-schema.org/draft/2020-12/schema"
 SCHEMA_ID = "https://local.moai/openfhe-m6-benchmark-schema-v1.json"
-SCHEMA_TITLE = "MOAI OpenFHE M6 benchmark artifact v1"
+SCHEMA_TITLE = "MOAI OpenFHE M6 single-sample timing artifact v1"
 SCHEMA_VERSION = 1
 BRANCH = "refactor/openfhe-cpu"
 TRACKING_REF = "refs/remotes/origin/refactor/openfhe-cpu"
@@ -73,8 +73,12 @@ M5_SHA256SUMS_SHA256 = "48abf4300188388499fff60dd2617a1009e546314537e320c4bb9c5c
 M5_DECISION = "PASS_M5_RUNNABLE_PROTOTYPE"
 M5_VERDICT = "GO_PROTOTYPE"
 TOKEN_COUNT = 5
-MEASURED_COUNT = 5
+WARMUP_COUNT = 1
+MEASURED_COUNT = 1
 EXTERNAL_WALL_TOLERANCE_MS = 100.0
+PRE_RUNTIME_COMMAND_COUNT = 11
+RUNTIME_COMMAND_COUNT = WARMUP_COUNT + MEASURED_COUNT
+TOTAL_COMMAND_COUNT = PRE_RUNTIME_COMMAND_COUNT + RUNTIME_COMMAND_COUNT + 1
 TIMING_FIELDS = (
     "fixture_load_oracle",
     "setup_keygen",
@@ -154,18 +158,19 @@ CSV_FIELDS = (
     "max_polynomial_depth",
 )
 CLAIM_BOUNDARY = [
-    "OpenFHE CKKS CPU server-only 12-layer encoder trace replay benchmark only.",
+    "OpenFHE CKKS CPU server-only 12-layer encoder trace replay single-sample timing only.",
     "paper_compat uses security_claim=none; no 128-bit security claim.",
     "Five fixed trace tokens are one packed batch, not five task-level samples.",
     "No tokenizer, classifier, task accuracy, or task-level end-to-end inference claim.",
     "No GPU, MOAI_GPU, Discrete CKKS, FBT, or QDQ claim.",
     "Legacy SEAL was not run and is noncomparable under the fixed benchmark contract.",
     "No SEAL speedup is computed or claimed.",
+    "One measured execution is a single timing observation, not a repeatability or dispersion estimate.",
 ]
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+:-]{0,127}$")
-LOG_MARKER = re.compile(r"^=== phase=(warmup|measured) index=([0-5]) ===$")
+LOG_MARKER = re.compile(r"^=== phase=(warmup|measured) index=([01]) ===$")
 
 
 class ValidationError(RuntimeError):
@@ -265,7 +270,8 @@ def validate_schema(value: Any) -> dict[str, Any]:
     if (
         properties.get("schema_version", {}).get("const") != SCHEMA_VERSION
         or properties.get("milestone", {}).get("const") != "M6"
-        or properties.get("verdict", {}).get("const") != "GO_M6_OPENFHE_BENCHMARK"
+        or properties.get("verdict", {}).get("const")
+        != "GO_M6_SINGLE_SAMPLE_EVIDENCE"
     ):
         raise ValidationError("M6 schema milestone/version/verdict drifted")
     try:
@@ -307,7 +313,9 @@ def _parse_timestamp(value: str, label: str) -> datetime:
 
 def _summary(values: list[float]) -> dict[str, Any]:
     if len(values) != MEASURED_COUNT:
-        raise ValidationError("statistics require exactly five measured values")
+        raise ValidationError(
+            f"statistics require exactly {MEASURED_COUNT} measured value"
+        )
     parsed = [_finite(value, "statistic sample") for value in values]
     median = float(statistics.median(parsed))
     return {
@@ -389,7 +397,10 @@ def _validate_sample(sample: dict[str, Any], label: str) -> None:
 
 
 def _expected_phases() -> list[tuple[str, int]]:
-    return [("warmup", 0), *( ("measured", index) for index in range(1, 6) )]
+    return [
+        ("warmup", 0),
+        *(("measured", index) for index in range(1, MEASURED_COUNT + 1)),
+    ]
 
 
 def _manifest_samples(manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -410,6 +421,16 @@ def _manifest_samples(manifest: dict[str, Any]) -> list[dict[str, Any]]:
             < record["sample"]["timing_ms"]["end_to_end_batch"]
         ):
             raise ValidationError(f"samples[{index}] external wall is below end-to-end time")
+    baseline = records[0]["sample"]
+    for record in records[1:]:
+        if record["sample"]["serialized_sizes"] != baseline["serialized_sizes"]:
+            raise ValidationError(
+                "warm-up and measured serialized-size records differ"
+            )
+        if record["sample"]["operation_counts"] != baseline["operation_counts"]:
+            raise ValidationError(
+                "warm-up and measured operation-count records differ"
+            )
     return records
 
 
@@ -471,8 +492,10 @@ def _verify_raw_logs(root: Path, records: list[dict[str, Any]]) -> None:
         time_lines = (root / "time.log").read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeError) as error:
         raise ValidationError(f"cannot read time.log: {error}") from error
-    if len(time_lines) != 6:
-        raise ValidationError("time.log must contain exactly six records")
+    if len(time_lines) != len(_expected_phases()):
+        raise ValidationError(
+            f"time.log must contain exactly {len(_expected_phases())} records"
+        )
     for manifest_record, line, (phase, index) in zip(records, time_lines, _expected_phases(), strict=True):
         try:
             value = _strict_json_loads(line)
@@ -507,7 +530,7 @@ def _verify_metrics(manifest: dict[str, Any], measured: list[dict[str, Any]]) ->
     }
     expected_quality.update({"all_finite": True, "all_passed": True})
     expected = {
-        "measured_count": 5,
+        "measured_count": MEASURED_COUNT,
         "token_count": 5,
         "timing_ms": expected_timing,
         "external_wall_seconds": _timing_summary(
@@ -521,7 +544,9 @@ def _verify_metrics(manifest: dict[str, Any], measured: list[dict[str, Any]]) ->
         "correctness": expected_quality,
     }
     if canonical_json_bytes(manifest["metrics"]) != canonical_json_bytes(expected):
-        raise ValidationError("manifest metrics/statistics differ from five measured samples")
+        raise ValidationError(
+            "manifest metrics/single-sample summary differs from the measured sample"
+        )
 
 
 def _verify_metrics_csv(root: Path, measured: list[dict[str, Any]]) -> None:
@@ -533,8 +558,10 @@ def _verify_metrics_csv(root: Path, measured: list[dict[str, Any]]) -> None:
             rows = list(reader)
     except (OSError, UnicodeError, csv.Error) as error:
         raise ValidationError(f"cannot parse metrics.csv: {error}") from error
-    if len(rows) != 5:
-        raise ValidationError("metrics.csv must contain exactly five measured rows")
+    if len(rows) != MEASURED_COUNT:
+        raise ValidationError(
+            f"metrics.csv must contain exactly {MEASURED_COUNT} measured row"
+        )
     for manifest_record, row in zip(measured, rows, strict=True):
         sample = manifest_record["sample"]
         expected: dict[str, Any] = {"sample_index": manifest_record["index"]}
@@ -803,15 +830,17 @@ def _verify_environment(manifest: dict[str, Any]) -> None:
         or threading.get("forced") != FORCED_THREAD_ENVIRONMENT
         or threading.get("cleared_inherited_variables") != list(cleared)
         or threading.get("applies_to")
-        != "configure, build, CTest, warm-up, measured samples, validator"
+        != "configure, build, CTest, warm-up, measured sample, validator"
     ):
         raise ValidationError("M6 fixed 16-thread environment contract drifted")
 
 
 def _verify_commands(manifest: dict[str, Any]) -> None:
     commands = manifest["commands"]
-    if len(commands) != 18:
-        raise ValidationError("M6 command transcript must contain exactly 18 commands")
+    if len(commands) != TOTAL_COMMAND_COUNT:
+        raise ValidationError(
+            f"M6 command transcript must contain exactly {TOTAL_COMMAND_COUNT} commands"
+        )
     expected_git = [
         ["/usr/bin/git", "status", "--porcelain=v1", "--untracked-files=normal"],
         ["/usr/bin/git", "branch", "--show-current"],
@@ -887,7 +916,8 @@ def _verify_commands(manifest: dict[str, Any]) -> None:
         raise ValidationError("M6 configure/build/linkage/CTest transcript drifted")
 
     runtime: list[tuple[str, int]] = []
-    for command in commands[11:17]:
+    runtime_end = PRE_RUNTIME_COMMAND_COUNT + RUNTIME_COMMAND_COUNT
+    for command in commands[PRE_RUNTIME_COMMAND_COUNT:runtime_end]:
         argv = command["argv"]
         expected_tail = [
             "/home/shawnsheep/MOAI/build-openfhe/openfhe_encoder_12_layer_smoke",
@@ -908,8 +938,11 @@ def _verify_commands(manifest: dict[str, Any]) -> None:
             raise ValidationError("M6 GNU time format is malformed") from error
         runtime.append((descriptor.get("phase"), descriptor.get("index")))
     if runtime != _expected_phases():
-        raise ValidationError(f"M6 command transcript is not one warm-up plus five measured: {runtime}")
-    validator_argv = commands[17]["argv"]
+        raise ValidationError(
+            "M6 command transcript is not one warm-up plus one measured: "
+            f"{runtime}"
+        )
+    validator_argv = commands[runtime_end]["argv"]
     expected_validator_tail = [
         str(REPO_ROOT / "scripts/validate_openfhe_m6_benchmark.py"),
         "--schema",

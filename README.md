@@ -16,8 +16,8 @@ The approved M5 v6 artifact is
 `534f582a655669bafee9d9098cb54efbf66d2cd5`. It passed the formal client-validated
 12-layer correctness gate at rel-L2 `0.0017283753946057928`, cosine
 `0.9999985073522254`, and inactive maximum `3.415363197201149e-06`. M6 adds a distinct
-benchmark contract; it does not promote the M5 single execution or shortened schedule
-diagnostics into timing evidence.
+single-sample timing contract; it does not promote the M5 single execution or shortened
+schedule diagnostics into timing evidence.
 
 Configure, build, and run the fast gates:
 
@@ -91,7 +91,7 @@ ctest --test-dir build-openfhe --output-on-failure \
 ```
 
 On the development host the full correctness gate uses roughly 31 GiB peak RSS and
-takes about 31 minutes. This is a correctness observation, not an M6 benchmark. The M4
+takes about 31 minutes. This is a correctness observation, not M6 timing evidence. The M4
 live regression evidence is already part of the validated M5 prerequisite chain. Its
 runner is:
 
@@ -191,22 +191,24 @@ inference and any SEAL speedup claim.
 
 M6 measures the same five-token, 12-layer OpenFHE workload with checkpoint observation
 disabled inside the server-online window. Every execution still performs a client-owned
-final decryption and correctness gate. The formal harness uses one discarded warm-up and
-five measured executions, reports median/MAD/minimum/maximum for phase and wall latency,
-reports batch and five-token amortized latency, records process high-water RSS, and
-counts OpenFHE BINARY archive component bytes for keys and ciphertexts. Size measurement
-is outside server-online timing and writes no key material:
+final decryption and correctness gate. By explicit user amendment, the prototype harness
+uses one discarded warm-up and exactly one measured execution. It reports the observed
+phase and wall latency, batch and five-token amortized latency, process high-water RSS,
+and OpenFHE BINARY archive component bytes for keys and ciphertexts. Compatibility
+summary fields have median/minimum/maximum equal to the one observation and MAD equal to
+zero; they do not estimate repeatability or dispersion. Size measurement is outside
+server-online timing and writes no key material:
 
 ```bash
 /home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
   scripts/run_openfhe_m6_benchmark.py
 ```
 
-The full protocol is expected to take roughly 41 hours on the development host. The
-runner requires a clean pushed commit with matching local, tracking, and live-remote
-SHAs, and binds the approved M5 r27 artifact before any timing sample. Legacy SEAL uses a
-different parameter/packing/precision/workload contract, so it is recorded as
-non-comparable and no speedup is calculated.
+The full 1+1 protocol is expected to take roughly 14–15 hours on the development host,
+depending on host load. The runner requires a clean pushed commit with matching local,
+tracking, and live-remote SHAs, and binds the approved M5 r27 artifact before either
+execution. Legacy SEAL uses a different parameter/packing/precision/workload contract,
+so it is recorded as non-comparable and no speedup is calculated.
 
 ## Optional legacy SEAL reference
 

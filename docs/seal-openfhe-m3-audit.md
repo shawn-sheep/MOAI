@@ -223,7 +223,7 @@ denominator max-absolute error is `2.5265067815638531e-11`. Every run reports
 rotations/Ct-Pt/Ct-Ct/rescale `0/19/10/28`, logical/iterative bootstraps `3/6`,
 five Chebyshev evaluations, 111 estimated polynomial multiplications, maximum
 polynomial depth 10, and maximum observed level 30 of 31. These are reduced
-16-slot M3 smoke resource observations, not the five-repeat M6 benchmark.
+16-slot M3 smoke resource observations, not M6 single-sample timing evidence.
 
 This closes the commit-before-test gate only. The authoritative M3 GO requires a
 clean milestone commit, a schema-v2 artifact generated from that executable,

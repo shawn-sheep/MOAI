@@ -142,7 +142,7 @@ def _write_bundle() -> tuple[tempfile.TemporaryDirectory[str], Path, dict[str, o
         dir=validator.OUTPUT_ROOT,
     )
     root = Path(temporary.name)
-    measured = [fixture.executed(index) for index in range(1, 6)]
+    measured = [fixture.executed(1)]
     warmup_sample = fixture.sample(0)
     warmup = runner.ExecutedSample(
         phase="warmup",
@@ -264,11 +264,11 @@ def _write_bundle() -> tuple[tempfile.TemporaryDirectory[str], Path, dict[str, o
             "executable_sha256": "b" * 64,
             "executable_bytes": 1,
             "warmup_count": 1,
-            "measured_count": 5,
+            "measured_count": 1,
             "independent_processes": True,
             "token_count": 5,
             "encoder_layers": 12,
-            "timing_kind": "benchmark",
+            "timing_kind": "single_sample_measurement",
         },
         "preflight": {
             "fresh_configure": True,
@@ -284,7 +284,7 @@ def _write_bundle() -> tuple[tempfile.TemporaryDirectory[str], Path, dict[str, o
         },
         "commands": [
             {"argv": [f"synthetic-{index}"], "cwd": str(REPO_ROOT), "returncode": 0}
-            for index in range(18)
+            for index in range(14)
         ],
         "environment": {
             "architecture": "x86_64",
@@ -299,7 +299,7 @@ def _write_bundle() -> tuple[tempfile.TemporaryDirectory[str], Path, dict[str, o
             "threading": {
                 "forced": {"OMP_NUM_THREADS": "16", "OMP_DYNAMIC": "FALSE"},
                 "cleared_inherited_variables": cleared,
-                "applies_to": "configure, build, CTest, warm-up, measured samples, validator",
+                "applies_to": "configure, build, CTest, warm-up, measured sample, validator",
             },
         },
         "inputs": [{"path": "synthetic", "bytes": 1, "sha256": "c" * 64}],
@@ -311,23 +311,23 @@ def _write_bundle() -> tuple[tempfile.TemporaryDirectory[str], Path, dict[str, o
         "comparison": runner._seal_comparison(),
         "gate": {
             "passed": True,
-            "decision": "PASS_M6_OPENFHE_BENCHMARK",
+            "decision": "PASS_M6_SINGLE_SAMPLE_MEASUREMENT",
             "checks": {
                 "git": "PASS",
                 "m5_prerequisite": "PASS",
                 "build": "PASS",
                 "narrow_ctest": "PASS",
-                "repeat_contract": "PASS",
+                "sample_count_contract": "PASS_ONE_WARMUP_ONE_MEASURED",
                 "correctness": "PASS",
                 "bytes_and_counts": "PASS",
-                "statistics": "PASS",
+                "single_sample_summary": "PASS_NO_DISPERSION_CLAIM",
                 "artifact_integrity": "PASS",
                 "seal_comparability": "PASS_NONCOMPARABLE",
             },
         },
         "artifacts": artifact_records,
         "claim_boundary": copy.deepcopy(validator.CLAIM_BOUNDARY),
-        "verdict": "GO_M6_OPENFHE_BENCHMARK",
+        "verdict": "GO_M6_SINGLE_SAMPLE_EVIDENCE",
     }
     manifest["commands"] = _valid_commands(manifest)
     (root / "manifest.json").write_text(
@@ -401,6 +401,24 @@ class SchemaAndSemanticTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.ValidationError, "repeat/order"):
             validator._manifest_samples(manifest)
 
+    def test_schema_rejects_a_second_measured_sample(self) -> None:
+        temporary, _, manifest = _write_bundle()
+        self.addCleanup(temporary.cleanup)
+        second = copy.deepcopy(manifest["samples"]["measured"][0])  # type: ignore[index]
+        second["index"] = 2
+        manifest["samples"]["measured"].append(second)  # type: ignore[index]
+        with self.assertRaises(validator.ValidationError):
+            validator._validate_instance(manifest, self.schema)
+
+    def test_rejects_warmup_measured_static_size_drift(self) -> None:
+        temporary, _, manifest = _write_bundle()
+        self.addCleanup(temporary.cleanup)
+        manifest["samples"]["measured"][0]["sample"]["serialized_sizes"][  # type: ignore[index]
+            "final_output"
+        ]["ciphertext_component_sum_bytes"] += 1
+        with self.assertRaisesRegex(validator.ValidationError, "serialized-size"):
+            validator._manifest_samples(manifest)
+
     def test_rejects_duplicate_keys_in_raw_sample_json(self) -> None:
         encoded = json.dumps(fixture.sample())
         duplicated = encoded[:-1] + ',"passed":true}'
@@ -417,7 +435,7 @@ class SchemaAndSemanticTests(unittest.TestCase):
             validator._verify_preflight(manifest)
         manifest["commands"] = [  # type: ignore[assignment]
             {"argv": [f"fake-{index}"], "cwd": str(REPO_ROOT), "returncode": 0}
-            for index in range(18)
+            for index in range(14)
         ]
         with self.assertRaisesRegex(validator.ValidationError, "Git preflight"):
             validator._verify_commands(manifest)
@@ -451,15 +469,25 @@ class SchemaAndSemanticTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.ValidationError, "executable hash"):
             validator._verify_workload(manifest)
 
-    def test_rejects_statistics_tamper(self) -> None:
+    def test_rejects_single_sample_summary_tamper(self) -> None:
         temporary, _, manifest = _write_bundle()
         self.addCleanup(temporary.cleanup)
         manifest["metrics"]["timing_ms"]["server_online"]["batch"][  # type: ignore[index]
             "median"
         ] += 1.0
         measured = manifest["samples"]["measured"]  # type: ignore[index]
-        with self.assertRaisesRegex(validator.ValidationError, "statistics"):
+        with self.assertRaisesRegex(validator.ValidationError, "single-sample summary"):
             validator._verify_metrics(manifest, measured)
+
+    def test_rejects_extra_metrics_csv_row(self) -> None:
+        temporary, manifest_path, manifest = _write_bundle()
+        self.addCleanup(temporary.cleanup)
+        metrics_path = manifest_path.parent / "metrics.csv"
+        lines = metrics_path.read_text(encoding="utf-8").splitlines()
+        metrics_path.write_text("\n".join([*lines, lines[-1]]) + "\n", encoding="utf-8")
+        measured = manifest["samples"]["measured"]  # type: ignore[index]
+        with self.assertRaisesRegex(validator.ValidationError, "exactly 1 measured row"):
+            validator._verify_metrics_csv(manifest_path.parent, measured)
 
     def test_rejects_any_speedup_value_or_alias(self) -> None:
         with self.assertRaisesRegex(validator.ValidationError, "speedup"):

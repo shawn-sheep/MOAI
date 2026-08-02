@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://local.moai/openfhe-m6-benchmark-schema-v1.json",
-  "title": "MOAI OpenFHE M6 benchmark artifact v1",
-  "description": "Fail-closed five-token, 12-layer OpenFHE CKKS CPU benchmark evidence.",
+  "title": "MOAI OpenFHE M6 single-sample timing artifact v1",
+  "description": "Fail-closed five-token, 12-layer OpenFHE CKKS CPU single-sample timing evidence.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -57,8 +57,8 @@
     "preflight": {"$ref": "#/$defs/preflight"},
     "commands": {
       "type": "array",
-      "minItems": 18,
-      "maxItems": 18,
+      "minItems": 14,
+      "maxItems": 14,
       "items": {"$ref": "#/$defs/command"}
     },
     "environment": {"$ref": "#/$defs/environment"},
@@ -75,8 +75,8 @@
         "warmup": {"$ref": "#/$defs/executedSample"},
         "measured": {
           "type": "array",
-          "minItems": 5,
-          "maxItems": 5,
+          "minItems": 1,
+          "maxItems": 1,
           "items": {"$ref": "#/$defs/executedSample"}
         }
       }
@@ -92,11 +92,11 @@
     },
     "claim_boundary": {
       "type": "array",
-      "minItems": 7,
-      "maxItems": 7,
+      "minItems": 8,
+      "maxItems": 8,
       "items": {"type": "string", "minLength": 1}
     },
-    "verdict": {"const": "GO_M6_OPENFHE_BENCHMARK"}
+    "verdict": {"const": "GO_M6_SINGLE_SAMPLE_EVIDENCE"}
   },
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -351,7 +351,7 @@
               "items": {"type": "string", "minLength": 1}
             },
             "applies_to": {
-              "const": "configure, build, CTest, warm-up, measured samples, validator"
+              "const": "configure, build, CTest, warm-up, measured sample, validator"
             }
           }
         }
@@ -466,11 +466,11 @@
         "executable_sha256": {"$ref": "#/$defs/sha256"},
         "executable_bytes": {"$ref": "#/$defs/positiveInteger"},
         "warmup_count": {"const": 1},
-        "measured_count": {"const": 5},
+        "measured_count": {"const": 1},
         "independent_processes": {"const": true},
         "token_count": {"const": 5},
         "encoder_layers": {"const": 12},
-        "timing_kind": {"const": "benchmark"}
+        "timing_kind": {"const": "single_sample_measurement"}
       }
     },
     "preflight": {
@@ -720,7 +720,7 @@
       "required": ["phase", "index", "sample", "external_wall_seconds", "external_peak_rss_bytes"],
       "properties": {
         "phase": {"enum": ["warmup", "measured"]},
-        "index": {"type": "integer", "minimum": 0, "maximum": 5},
+        "index": {"type": "integer", "minimum": 0, "maximum": 1},
         "sample": {"$ref": "#/$defs/benchmarkSample"},
         "external_wall_seconds": {"$ref": "#/$defs/nonNegativeNumber"},
         "external_peak_rss_bytes": {"$ref": "#/$defs/positiveInteger"}
@@ -731,7 +731,7 @@
       "additionalProperties": false,
       "required": ["samples", "median", "mad", "minimum", "maximum"],
       "properties": {
-        "samples": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/nonNegativeNumber"}},
+        "samples": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"$ref": "#/$defs/nonNegativeNumber"}},
         "median": {"$ref": "#/$defs/nonNegativeNumber"},
         "mad": {"$ref": "#/$defs/nonNegativeNumber"},
         "minimum": {"$ref": "#/$defs/nonNegativeNumber"},
@@ -765,7 +765,7 @@
       "additionalProperties": false,
       "required": ["measured_count", "token_count", "timing_ms", "external_wall_seconds", "peak_rss_bytes", "serialized_sizes", "operation_counts", "correctness"],
       "properties": {
-        "measured_count": {"const": 5},
+        "measured_count": {"const": 1},
         "token_count": {"const": 5},
         "timing_ms": {
           "type": "object",
@@ -814,20 +814,20 @@
       "required": ["passed", "decision", "checks"],
       "properties": {
         "passed": {"const": true},
-        "decision": {"const": "PASS_M6_OPENFHE_BENCHMARK"},
+        "decision": {"const": "PASS_M6_SINGLE_SAMPLE_MEASUREMENT"},
         "checks": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["git", "m5_prerequisite", "build", "narrow_ctest", "repeat_contract", "correctness", "bytes_and_counts", "statistics", "artifact_integrity", "seal_comparability"],
+          "required": ["git", "m5_prerequisite", "build", "narrow_ctest", "sample_count_contract", "correctness", "bytes_and_counts", "single_sample_summary", "artifact_integrity", "seal_comparability"],
           "properties": {
             "git": {"const": "PASS"},
             "m5_prerequisite": {"const": "PASS"},
             "build": {"const": "PASS"},
             "narrow_ctest": {"const": "PASS"},
-            "repeat_contract": {"const": "PASS"},
+            "sample_count_contract": {"const": "PASS_ONE_WARMUP_ONE_MEASURED"},
             "correctness": {"const": "PASS"},
             "bytes_and_counts": {"const": "PASS"},
-            "statistics": {"const": "PASS"},
+            "single_sample_summary": {"const": "PASS_NO_DISPERSION_CLAIM"},
             "artifact_integrity": {"const": "PASS"},
             "seal_comparability": {"const": "PASS_NONCOMPARABLE"}
           }

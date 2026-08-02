@@ -356,6 +356,6 @@ The versioned v6 M5 runner performs one untimed-claim prototype execution, binds
 frozen inputs plus the executable by SHA-256 before and after the run, requires 12
 position-specific metadata/count records, and invokes the independent schema and
 semantic validator. The runner emits `timing_claim=false`; M6 therefore uses a separate
-benchmark contract and does not reinterpret r27 latency as benchmark evidence. A
+single-sample timing contract and does not reinterpret r27 latency as timing evidence. A
 shortened diagnostic, calibration run, dirty-tree run, remote-SHA mismatch, input or
 binary hash drift, or any threshold/schema failure is not M5 evidence.

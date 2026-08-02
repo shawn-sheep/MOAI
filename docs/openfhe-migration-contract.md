@@ -66,15 +66,17 @@ engineering bound that is stricter than legacy observability. It must be labelle
 `prototype_only` and `MOAI-observability-compatible`; it is not a claim that legacy MOAI used
 `1e-3`, and it does not establish strict SEAL/OpenFHE numerical parity.
 
-## M6 benchmark contract (2026-08-02)
+## M6 single-sample timing amendment (2026-08-02)
 
 M6 does not reinterpret the single M5 correctness execution as a benchmark.  It first
 binds the approved M5 v6 runnable-prototype artifact by its fixed manifest and
 `SHA256SUMS` hashes and rechecks the required decision, verdict, and artifact contents.
-It then runs one discarded warm-up followed by exactly five measured 12-layer
-executions.  A failed or rejected sample fails the complete run; it may not be replaced
-with a more favourable sample.  The M5 bundle's original full validation remains bound
-to its M5 commit; M6 does not claim to reconstruct that historical build tree.
+By explicit user amendment, M6 is a runnable-prototype exception to the general
+five-repeat benchmark rule above.  It runs one discarded warm-up followed by exactly one
+measured 12-layer execution.  A failed or rejected execution fails the complete run; it
+may not be replaced with a more favourable sample.  The M5 bundle's original full
+validation remains bound to its M5 commit; M6 does not claim to reconstruct that
+historical build tree.
 
 Before the server-online timer starts, setup explicitly completes OpenFHE bootstrap
 precomputation.  The server-online timing window then calls the 12-layer encoder with no
@@ -87,10 +89,12 @@ timing window.
 
 For setup/key generation (including bootstrap preparation), client encryption, server
 online, client final decryption, online batch latency, setup-inclusive pipeline latency,
-and external process wall time, the artifact records all five
-measured samples and reports median, median absolute deviation, minimum, and maximum.
-Both batch latencies and their five-token amortized values are reported.  Peak RSS is the
-whole process high-water mark, not server-only resident memory.
+and external process wall time, the artifact records one measured value.  Compatibility
+summary fields set median, minimum, and maximum to that observation and MAD to zero.
+Those degenerate fields are not evidence of repeatability, variance, a confidence
+interval, or stable latency.  Both batch latencies and their five-token amortized values
+are reported.  Peak RSS is the whole-process high-water mark, not server-only resident
+memory.
 
 Key and ciphertext byte counts use independent OpenFHE 1.5.1 BINARY archives with the
 frozen label `openfhe_binary_archive_component_sum_v1`.  The server-key figure is the
@@ -102,7 +106,8 @@ format and no key archive is written to the artifact.
 
 The legacy SEAL program remains an opt-in source/reference path.  Its parameters,
 packing, precision, workload composition, and validation protocol do not match the M6
-OpenFHE benchmark, so M6 records it as non-comparable and computes no speedup.
+OpenFHE single-sample measurement, so M6 records it as non-comparable and computes no
+speedup.
 
 ## Evidence boundary at M0
 
