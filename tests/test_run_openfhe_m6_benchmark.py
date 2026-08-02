@@ -136,6 +136,14 @@ def executed(index: int) -> runner.ExecutedSample:
 
 
 class BenchmarkSampleTests(unittest.TestCase):
+    def test_frozen_hash_constants_are_sha256(self) -> None:
+        for value in (
+            runner.PROFILE_SHA256,
+            runner.M5_MANIFEST_SHA256,
+            runner.M5_SHA256SUMS_SHA256,
+        ):
+            self.assertIsNotNone(runner.SHA256_PATTERN.fullmatch(value))
+
     def test_valid_sample_and_online_contract(self) -> None:
         value = sample()
         self.assertIs(runner._validate_benchmark_sample(value), value)

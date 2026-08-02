@@ -338,6 +338,15 @@ def _write_bundle() -> tuple[tempfile.TemporaryDirectory[str], Path, dict[str, o
 
 
 class SchemaAndSemanticTests(unittest.TestCase):
+    def test_frozen_hash_constants_are_sha256(self) -> None:
+        for value in (
+            validator.PROFILE_SHA256,
+            validator.M5_MANIFEST_SHA256,
+            validator.M5_SHA256SUMS_SHA256,
+        ):
+            self.assertEqual(len(value), 64)
+            self.assertRegex(value, r"^[0-9a-f]{64}$")
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.schema = validator.validate_schema(validator.load_json(validator.DEFAULT_SCHEMA))

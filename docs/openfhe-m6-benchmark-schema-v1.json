@@ -168,7 +168,7 @@
         "run_id": {"const": "20260801T224242+0900-m5-runnable-prototype-v6-534f582-r27"},
         "relative_path": {"const": "results/openfhe/20260801T224242+0900-m5-runnable-prototype-v6-534f582-r27"},
         "manifest_sha256": {"const": "d77425290cb15f6265527f362f016ee51c277e3a8e89da74592b79c353b44d95"},
-        "sha256sums_sha256": {"const": "48abf4300188388499fff60dd2617a1009e546314537e320c4bb9c5cbb148fd8e"},
+        "sha256sums_sha256": {"const": "48abf4300188388499fff60dd2617a1009e546314537e320c4bb9c5cbb148fd8"},
         "decision": {"const": "PASS_M5_RUNNABLE_PROTOTYPE"},
         "verdict": {"const": "GO_PROTOTYPE"},
         "validated": {"const": true}
