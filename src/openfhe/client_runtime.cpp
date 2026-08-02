@@ -3,16 +3,102 @@
 #include "moai/openfhe/context_factory.hpp"
 #include "moai/openfhe/evaluation_key_registry.hpp"
 
+#include "ciphertext-ser.h"
+#include "cryptocontext-ser.h"
+#include "key/key-ser.h"
+
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <map>
+#include <memory>
 #include <mutex>
+#include <ostream>
+#include <streambuf>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace moai::openfhe {
 namespace {
 
 using ContextImpl = lbcrypto::CryptoContextImpl<lbcrypto::DCRTPoly>;
+
+class CountingStreamBuffer final : public std::streambuf {
+public:
+    [[nodiscard]] uint64_t bytes_written() const noexcept {
+        return bytes_written_;
+    }
+
+protected:
+    std::streamsize xsputn(
+        const char_type*,
+        std::streamsize count) override {
+        if (count < 0) {
+            throw std::overflow_error(
+                "OpenFHE serializer requested a negative byte count");
+        }
+        AddBytes(static_cast<uint64_t>(count));
+        return count;
+    }
+
+    int_type overflow(int_type character) override {
+        if (traits_type::eq_int_type(character, traits_type::eof())) {
+            return traits_type::not_eof(character);
+        }
+        AddBytes(1);
+        return character;
+    }
+
+private:
+    void AddBytes(uint64_t bytes) {
+        if (bytes > std::numeric_limits<uint64_t>::max() - bytes_written_) {
+            throw std::overflow_error(
+                "OpenFHE binary archive byte count overflowed uint64");
+        }
+        bytes_written_ += bytes;
+    }
+
+    uint64_t bytes_written_{0};
+};
+
+template <typename Serializable>
+uint64_t CountBinaryArchiveBytes(
+    const Serializable& value,
+    const char* label) {
+    CountingStreamBuffer buffer;
+    std::ostream output(&buffer);
+    try {
+        lbcrypto::Serial::Serialize(
+            value,
+            output,
+            lbcrypto::SerType::BINARY);
+    }
+    catch (const std::exception& exception) {
+        throw std::runtime_error(
+            std::string("OpenFHE BINARY serialization failed for ") + label +
+            ": " + exception.what());
+    }
+    const bool serialization_succeeded = output.good();
+    const uint64_t bytes = buffer.bytes_written();
+    if (!serialization_succeeded || bytes == 0) {
+        throw std::runtime_error(
+            std::string("OpenFHE BINARY serialization produced no archive for ") +
+            label);
+    }
+    return bytes;
+}
+
+uint64_t CheckedAddBytes(
+    uint64_t lhs,
+    uint64_t rhs,
+    const char* label) {
+    if (rhs > std::numeric_limits<uint64_t>::max() - lhs) {
+        throw std::overflow_error(
+            std::string(label) + " byte count overflowed uint64");
+    }
+    return lhs + rhs;
+}
 
 bool ScalesMatch(double lhs, double rhs) {
     if (!std::isfinite(lhs) || !std::isfinite(rhs) || lhs <= 0.0 || rhs <= 0.0) {
@@ -242,6 +328,104 @@ std::vector<std::vector<double>> ClientRuntime::Decrypt(
         decoded.push_back(std::move(values));
     }
     return decoded;
+}
+
+SerializedKeySizeMetrics ClientRuntime::MeasureSerializedKeySizes() const {
+    if (!keys_generated_ || !public_key_ || !private_key_) {
+        throw std::logic_error(
+            "client keys must be generated before measuring serialized sizes");
+    }
+    if (!evaluation_keys_generated_ || multiplication_eval_keys_.empty() ||
+        automorphism_eval_keys_.empty()) {
+        throw std::logic_error(
+            "multiplication and automorphism evaluation keys must be generated "
+            "before measuring serialized sizes");
+    }
+    const std::string key_tag = public_key_->GetKeyTag();
+    if (key_tag.empty() || private_key_->GetKeyTag() != key_tag) {
+        throw std::logic_error(
+            "client public/private key tags do not match for serialization");
+    }
+
+    // These container shapes match OpenFHE's BINARY evaluation-key archive
+    // contract without inserting the client's keys into process-global maps.
+    const std::map<
+        std::string,
+        std::vector<lbcrypto::EvalKey<lbcrypto::DCRTPoly>>>
+        multiplication_archive{{key_tag, multiplication_eval_keys_}};
+    const std::map<
+        std::string,
+        std::shared_ptr<std::map<
+            uint32_t,
+            lbcrypto::EvalKey<lbcrypto::DCRTPoly>>>>
+        automorphism_archive{{
+            key_tag,
+            std::make_shared<std::map<
+                uint32_t,
+                lbcrypto::EvalKey<lbcrypto::DCRTPoly>>>(
+                automorphism_eval_keys_)}};
+
+    SerializedKeySizeMetrics metrics;
+    metrics.context_bytes =
+        CountBinaryArchiveBytes(context_, "crypto context");
+    metrics.public_key_bytes =
+        CountBinaryArchiveBytes(public_key_, "public key");
+    metrics.private_key_bytes =
+        CountBinaryArchiveBytes(private_key_, "private key");
+    metrics.evaluation_multiplication_key_bytes =
+        CountBinaryArchiveBytes(
+            multiplication_archive,
+            "multiplication evaluation keys");
+    metrics.evaluation_automorphism_key_bytes =
+        CountBinaryArchiveBytes(
+            automorphism_archive,
+            "automorphism evaluation keys");
+
+    uint64_t server_component_sum = metrics.context_bytes;
+    server_component_sum = CheckedAddBytes(
+        server_component_sum,
+        metrics.public_key_bytes,
+        "server key bundle component sum");
+    server_component_sum = CheckedAddBytes(
+        server_component_sum,
+        metrics.evaluation_multiplication_key_bytes,
+        "server key bundle component sum");
+    server_component_sum = CheckedAddBytes(
+        server_component_sum,
+        metrics.evaluation_automorphism_key_bytes,
+        "server key bundle component sum");
+    metrics.server_key_bundle_component_sum_bytes = server_component_sum;
+    return metrics;
+}
+
+SerializedCipherTensorSizeMetrics
+ClientRuntime::MeasureSerializedCipherTensorSizes(
+    const CipherTensor& tensor) const {
+    if (tensor.empty()) {
+        throw std::invalid_argument(
+            "cannot measure an empty CipherTensor archive");
+    }
+    if (tensor.ciphertexts.size() >
+        std::numeric_limits<uint64_t>::max()) {
+        throw std::overflow_error("CipherTensor count overflowed uint64");
+    }
+
+    SerializedCipherTensorSizeMetrics metrics;
+    metrics.ciphertext_count =
+        static_cast<uint64_t>(tensor.ciphertexts.size());
+    for (const auto& ciphertext : tensor.ciphertexts) {
+        if (!ciphertext) {
+            throw std::invalid_argument(
+                "cannot serialize a null CipherTensor ciphertext");
+        }
+        const uint64_t ciphertext_bytes =
+            CountBinaryArchiveBytes(ciphertext, "ciphertext");
+        metrics.ciphertext_component_sum_bytes = CheckedAddBytes(
+            metrics.ciphertext_component_sum_bytes,
+            ciphertext_bytes,
+            "CipherTensor component sum");
+    }
+    return metrics;
 }
 
 ServerKeyBundle ClientRuntime::ExportServerKeyBundle() const {

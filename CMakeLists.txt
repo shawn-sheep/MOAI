@@ -535,6 +535,35 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME openfhe_m6_benchmark_schema_contract
+    COMMAND "${MOAI_PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/scripts/validate_openfhe_m6_benchmark.py"
+            --schema "${CMAKE_SOURCE_DIR}/docs/openfhe-m6-benchmark-schema-v1.json"
+  )
+  set_tests_properties(openfhe_m6_benchmark_schema_contract PROPERTIES
+    LABELS "m6;plaintext;artifact;benchmark;v1"
+    TIMEOUT 300
+  )
+  add_test(
+    NAME openfhe_m6_benchmark_validator_contract
+    COMMAND "${MOAI_PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/tests/test_validate_openfhe_m6_benchmark.py"
+  )
+  set_tests_properties(openfhe_m6_benchmark_validator_contract PROPERTIES
+    LABELS "m6;plaintext;artifact;benchmark;v1"
+    TIMEOUT 300
+  )
+  add_test(
+    NAME openfhe_m6_benchmark_runner_contract
+    COMMAND "${MOAI_PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/tests/test_run_openfhe_m6_benchmark.py"
+  )
+  set_tests_properties(openfhe_m6_benchmark_runner_contract PROPERTIES
+    LABELS "m6;plaintext;artifact;benchmark;v1"
+    TIMEOUT 300
+  )
+
+  add_test(
     NAME moai_trace_contract
     COMMAND "${MOAI_PYTHON_EXECUTABLE}"
             "${CMAKE_SOURCE_DIR}/scripts/validate_moai_trace_contract.py"
@@ -578,6 +607,30 @@ if(BUILD_TESTING)
   target_link_options(openfhe_fast_smoke PRIVATE "-Wl,--disable-new-dtags")
   add_test(NAME openfhe_fast_smoke COMMAND openfhe_fast_smoke)
   set_tests_properties(openfhe_fast_smoke PROPERTIES LABELS "openfhe;fast")
+
+  add_executable(
+    openfhe_serialized_size_smoke
+    tests/openfhe_serialized_size_smoke.cpp
+  )
+  target_link_libraries(openfhe_serialized_size_smoke PRIVATE
+    moai::openfhe_client
+  )
+  set_target_properties(
+    openfhe_serialized_size_smoke
+    PROPERTIES BUILD_RPATH "${OpenFHE_LIBDIR}"
+  )
+  target_link_options(
+    openfhe_serialized_size_smoke
+    PRIVATE "-Wl,--disable-new-dtags"
+  )
+  add_test(
+    NAME openfhe_serialized_size_smoke
+    COMMAND openfhe_serialized_size_smoke
+  )
+  set_tests_properties(openfhe_serialized_size_smoke PROPERTIES
+    LABELS "openfhe;fast;m6;serialization;client-only"
+    TIMEOUT 300
+  )
 
   add_executable(
     openfhe_packing_linear_smoke

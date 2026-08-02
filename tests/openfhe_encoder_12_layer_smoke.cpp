@@ -48,6 +48,8 @@ constexpr double kStrictInactiveMaximum = 1e-6;
 // retain their independent 1e-6 gates.
 constexpr double kM5PrototypeInactiveMaximum = 1e-3;
 constexpr uint32_t kMetadataMultiplicativeDepth = 47;
+constexpr uint32_t kExpectedMaximumObservedLevel = 45;
+constexpr uint32_t kExpectedMaximumPolynomialDepth = 10;
 constexpr std::size_t kInactiveZeroCheckpointCount = 28;
 
 enum class MetadataMode {
@@ -65,6 +67,7 @@ struct Arguments {
     std::filesystem::path data_root{"data"};
     bool preflight_only{false};
     bool crypto_preflight_only{false};
+    bool benchmark_sample{false};
     std::optional<std::size_t> requested_layer_count;
     bool metadata_calibration{false};
 };
@@ -259,6 +262,7 @@ Arguments ParseArgumentTokens(const std::vector<std::string>& tokens) {
     bool data_root_seen = false;
     bool preflight_seen = false;
     bool crypto_preflight_seen = false;
+    bool benchmark_sample_seen = false;
     bool layer_count_seen = false;
     bool calibration_seen = false;
     for (std::size_t index = 0; index < tokens.size(); ++index) {
@@ -291,6 +295,14 @@ Arguments ParseArgumentTokens(const std::vector<std::string>& tokens) {
             crypto_preflight_seen = true;
             arguments.crypto_preflight_only = true;
         }
+        else if (argument == "--benchmark-sample") {
+            if (benchmark_sample_seen) {
+                throw std::invalid_argument(
+                    "duplicate argument: --benchmark-sample");
+            }
+            benchmark_sample_seen = true;
+            arguments.benchmark_sample = true;
+        }
         else if (argument == "--diagnostic-layer-count") {
             if (layer_count_seen || index + 1 >= tokens.size()) {
                 throw std::invalid_argument(
@@ -313,15 +325,21 @@ Arguments ParseArgumentTokens(const std::vector<std::string>& tokens) {
                 "unknown or incomplete argument: " + argument);
         }
     }
-    if ((arguments.preflight_only || arguments.crypto_preflight_only) &&
+    if ((arguments.preflight_only || arguments.crypto_preflight_only ||
+         arguments.benchmark_sample) &&
         (arguments.requested_layer_count.has_value() ||
          arguments.metadata_calibration)) {
         throw std::invalid_argument(
-            "preflight-only modes cannot be combined with a runtime diagnostic");
+            "preflight and benchmark modes cannot be combined with a runtime "
+            "diagnostic");
     }
-    if (arguments.preflight_only && arguments.crypto_preflight_only) {
+    if (static_cast<unsigned int>(arguments.preflight_only) +
+            static_cast<unsigned int>(arguments.crypto_preflight_only) +
+            static_cast<unsigned int>(arguments.benchmark_sample) >
+        1U) {
         throw std::invalid_argument(
-            "plaintext and crypto preflight-only modes are mutually exclusive");
+            "plaintext preflight, crypto preflight, and benchmark sample modes "
+            "are mutually exclusive");
     }
     if (arguments.metadata_calibration &&
         !arguments.requested_layer_count.has_value()) {
@@ -1517,7 +1535,14 @@ void ValidateDiagnosticArgumentContract() {
         throw std::runtime_error("metadata-calibration argument mode drifted");
     }
     const auto formal = ParseArgumentTokens({});
+    const auto benchmark = ParseArgumentTokens({"--benchmark-sample"});
     if (EvaluatedLayerCount(formal) !=
+            moai::openfhe::kPaperCompatEncoderLayers ||
+        !benchmark.benchmark_sample ||
+        benchmark.preflight_only || benchmark.crypto_preflight_only ||
+        benchmark.requested_layer_count.has_value() ||
+        benchmark.metadata_calibration ||
+        EvaluatedLayerCount(benchmark) !=
             moai::openfhe::kPaperCompatEncoderLayers ||
         ResolveMetadataMode(formal) != MetadataMode::kExact ||
         ResolveRunKind(formal) != RunKind::kFormalFull ||
@@ -1561,6 +1586,12 @@ void ValidateDiagnosticArgumentContract() {
         {"--preflight-only", "--diagnostic-layer-count", "2"},
         {"--crypto-preflight-only", "--metadata-calibration",
          "--diagnostic-layer-count", "2"},
+        {"--benchmark-sample", "--diagnostic-layer-count", "2"},
+        {"--benchmark-sample", "--metadata-calibration",
+         "--diagnostic-layer-count", "2"},
+        {"--benchmark-sample", "--preflight-only"},
+        {"--benchmark-sample", "--crypto-preflight-only"},
+        {"--benchmark-sample", "--benchmark-sample"},
         {"--preflight-only", "--preflight-only"},
         {"--data-root", "data", "--data-root", "data"},
         {"--data-root", "--preflight-only"},
@@ -2863,6 +2894,197 @@ void PrintPreflight(const FrozenInputs& inputs, double elapsed_ms) {
         << ",\"load_and_oracle_ms\":" << elapsed_ms << "}\n";
 }
 
+void RunBenchmarkSample(
+    const FrozenInputs& inputs,
+    moai::openfhe::ClientRuntime& client,
+    moai::openfhe::ServerRuntime& server,
+    moai::openfhe::FeaturePackedEncoder& encoder,
+    const CipherTensor& encrypted_input,
+    double fixture_load_oracle_ms,
+    double setup_keygen_ms,
+    double client_encrypt_ms) {
+    const auto size_before_begin = Clock::now();
+    const auto key_sizes = client.MeasureSerializedKeySizes();
+    const auto input_sizes =
+        client.MeasureSerializedCipherTensorSizes(encrypted_input);
+    const auto size_before_end = Clock::now();
+
+    const auto server_begin = Clock::now();
+    auto result = encoder.Evaluate(encrypted_input, inputs.weights, nullptr);
+    const auto server_end = Clock::now();
+    if (result.output.empty()) {
+        throw std::runtime_error(
+            "benchmark server evaluation returned an empty CipherTensor");
+    }
+
+    const auto size_after_begin = Clock::now();
+    const auto output_sizes =
+        client.MeasureSerializedCipherTensorSizes(result.output);
+    const auto size_after_end = Clock::now();
+
+    const auto decrypt_begin = Clock::now();
+    const auto decrypted_output = client.Decrypt(result.output);
+    const auto decrypt_end = Clock::now();
+
+    const auto validate_begin = Clock::now();
+    const auto final_metadata = InspectTensor(
+        result.output,
+        server,
+        moai::openfhe::kPaperCompatTraceTokens,
+        kDoubleScaleBits,
+        "M6 benchmark final output");
+    RequireMetadata(
+        final_metadata,
+        ExpectedEncoderRawOutputMetadata(
+            moai::openfhe::kPaperCompatEncoderLayers - 1),
+        "M6 benchmark final output");
+    const auto quality = MeasureQuality(
+        decrypted_output,
+        inputs.polynomial_outputs.back(),
+        moai::openfhe::kPaperCompatHiddenSize);
+    RequireQuality(quality, "M6 benchmark final encrypted output");
+    const double inactive_maximum = MaximumInactiveDeviation(
+        decrypted_output,
+        moai::openfhe::kPaperCompatHiddenSize,
+        0.0);
+    if (!std::isfinite(inactive_maximum) ||
+        inactive_maximum > kM5PrototypeInactiveMaximum) {
+        std::ostringstream message;
+        message << std::setprecision(17)
+                << "M6 benchmark final inactive gate exceeded "
+                << kM5PrototypeInactiveMaximum << ": " << inactive_maximum;
+        throw std::runtime_error(message.str());
+    }
+    const auto total_counts = Counts(server.metrics());
+    const auto expected_total = AddCounts(
+        MultiplyCounts(
+            kExpectedEncoderLayerCounts,
+            moai::openfhe::kPaperCompatEncoderLayers),
+        MultiplyCounts(
+            kExpectedInterLayerRefreshCounts,
+            moai::openfhe::kPaperCompatEncoderLayers - 1));
+    RequireCounts(total_counts, expected_total, "M6 benchmark final encoder");
+    if (server.metrics().multiplicative_depth !=
+            kMetadataMultiplicativeDepth ||
+        server.metrics().max_observed_level !=
+            kExpectedMaximumObservedLevel ||
+        server.metrics().max_polynomial_depth !=
+            kExpectedMaximumPolynomialDepth) {
+        std::ostringstream message;
+        message << "M6 benchmark depth contract drifted: multiplicative_depth="
+                << server.metrics().multiplicative_depth
+                << " max_observed_level="
+                << server.metrics().max_observed_level
+                << " max_polynomial_depth="
+                << server.metrics().max_polynomial_depth;
+        throw std::runtime_error(message.str());
+    }
+    const auto validate_end = Clock::now();
+
+    rusage usage{};
+    if (getrusage(RUSAGE_SELF, &usage) != 0) {
+        throw std::runtime_error("getrusage failed");
+    }
+    const double server_online_ms =
+        ElapsedMilliseconds(server_begin, server_end);
+    const double client_decrypt_ms =
+        ElapsedMilliseconds(decrypt_begin, decrypt_end);
+    const double client_validate_ms =
+        ElapsedMilliseconds(validate_begin, validate_end);
+    const double serialized_size_measurement_ms =
+        ElapsedMilliseconds(size_before_begin, size_before_end) +
+        ElapsedMilliseconds(size_after_begin, size_after_end);
+    const double end_to_end_batch_ms =
+        setup_keygen_ms + client_encrypt_ms + server_online_ms +
+        client_decrypt_ms;
+    const double online_batch_ms =
+        client_encrypt_ms + server_online_ms + client_decrypt_ms;
+    constexpr double token_count =
+        static_cast<double>(moai::openfhe::kPaperCompatTraceTokens);
+
+    std::cout
+        << "{\"test\":\"openfhe_encoder_12_layer_benchmark_sample\","
+        << "\"profile\":\"paper_compat\",\"security_claim\":\"none\","
+        << "\"parameter_sha256\":\"" << kExpectedProfileSha256 << "\","
+        << "\"backend\":\"OpenFHE CKKS CPU\","
+        << "\"execution_mode\":\"server-only\","
+        << "\"claim_scope\":\"m6_12_layer_benchmark_sample\","
+        << "\"benchmark_sample\":true,\"encoder_layers\":12,"
+        << "\"token_count\":5,\"client_encrypt_calls\":1,"
+        << "\"plaintext_activation_resets\":0,"
+        << "\"server_layer_evaluations\":12,\"inter_layer_refreshes\":11,"
+        << "\"chain_mode\":\"ciphertext_output_to_next_input\","
+        << "\"observer_present_during_server_online\":false,"
+        << "\"checkpoint_decryptions\":0,"
+        << "\"checkpoint_decryption_owner\":\"client\","
+        << "\"final_decryption_owner\":\"client\","
+        << "\"server_private_key_present\":false,\"server_decryptions\":0,"
+        << "\"server_plaintext_activations\":false,"
+        << "\"approximation_range_status\":"
+        << "\"prevalidated_by_bound_m5_artifact_not_observed_in_sample\","
+        << "\"timing_ms\":{\"fixture_load_oracle\":"
+        << fixture_load_oracle_ms
+        << ",\"setup_keygen\":" << setup_keygen_ms
+        << ",\"client_encrypt\":" << client_encrypt_ms
+        << ",\"server_online\":" << server_online_ms
+        << ",\"client_decrypt\":" << client_decrypt_ms
+        << ",\"client_validate\":" << client_validate_ms
+        << ",\"serialized_size_measurement\":"
+        << serialized_size_measurement_ms
+        << ",\"online_batch\":" << online_batch_ms
+        << ",\"online_batch_amortized_per_token\":"
+        << online_batch_ms / token_count
+        << ",\"end_to_end_batch\":" << end_to_end_batch_ms
+        << ",\"end_to_end_amortized_per_token\":"
+        << end_to_end_batch_ms / token_count
+        << ",\"server_online_amortized_per_token\":"
+        << server_online_ms / token_count
+        << "},\"correctness\":{\"relative_l2\":" << quality.relative_l2
+        << ",\"cosine\":" << quality.cosine
+        << ",\"max_absolute\":" << quality.maximum_absolute
+        << ",\"inactive_max_abs\":" << inactive_maximum
+        << ",\"finite\":true,\"passed\":true}"
+        << ",\"final_metadata\":";
+    PrintMetadata(final_metadata);
+    std::cout << ",\"operation_counts\":";
+    PrintCounts(total_counts);
+    std::cout
+        << ",\"multiplicative_depth\":"
+        << server.metrics().multiplicative_depth
+        << ",\"max_observed_level\":"
+        << server.metrics().max_observed_level
+        << ",\"max_polynomial_depth\":"
+        << server.metrics().max_polynomial_depth << ','
+        << "\"serialized_sizes\":{\"keys\":{"
+        << "\"serialization_format\":\""
+        << key_sizes.serialization_format << "\","
+        << "\"context_bytes\":" << key_sizes.context_bytes << ','
+        << "\"public_key_bytes\":" << key_sizes.public_key_bytes << ','
+        << "\"private_key_bytes\":" << key_sizes.private_key_bytes << ','
+        << "\"evaluation_multiplication_key_bytes\":"
+        << key_sizes.evaluation_multiplication_key_bytes << ','
+        << "\"evaluation_automorphism_key_bytes\":"
+        << key_sizes.evaluation_automorphism_key_bytes << ','
+        << "\"server_key_bundle_component_sum_bytes\":"
+        << key_sizes.server_key_bundle_component_sum_bytes
+        << "},\"encrypted_input\":{\"serialization_format\":\""
+        << input_sizes.serialization_format << "\","
+        << "\"ciphertext_count\":" << input_sizes.ciphertext_count << ','
+        << "\"ciphertext_component_sum_bytes\":"
+        << input_sizes.ciphertext_component_sum_bytes
+        << "},\"final_output\":{\"serialization_format\":\""
+        << output_sizes.serialization_format << "\","
+        << "\"ciphertext_count\":" << output_sizes.ciphertext_count << ','
+        << "\"ciphertext_component_sum_bytes\":"
+        << output_sizes.ciphertext_component_sum_bytes << "}},"
+        << "\"peak_rss_bytes\":"
+        << static_cast<unsigned long long>(usage.ru_maxrss) * 1024ULL << ','
+        << "\"peak_rss_scope\":\"process_high_water_mark\","
+        << "\"timing_claim\":true,\"latency_kind\":\"benchmark\","
+        << "\"passed\":true}"
+        << std::endl;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -2916,10 +3138,15 @@ int main(int argc, char** argv) {
         const auto encrypted_input = client.Encrypt(inputs.initial_input, packing);
         const auto encrypt_end = Clock::now();
 
+        const auto server_setup_begin = Clock::now();
         moai::openfhe::ServerRuntime server(
             client.ExportServerKeyBundle(),
             profile);
         moai::openfhe::FeaturePackedEncoder encoder(server);
+        if (arguments.benchmark_sample) {
+            server.PrepareBootstrap();
+        }
+        const auto server_setup_end = Clock::now();
         ValidateCompositePreflight(
             encoder,
             encrypted_input,
@@ -2947,6 +3174,19 @@ int main(int argc, char** argv) {
                 << "\"server_decryptions\":0,\"server_plaintext_activations\":false,"
                 << "\"additive_he_operations\":0,\"passed\":true}"
                 << std::endl;
+            return 0;
+        }
+        if (arguments.benchmark_sample) {
+            RunBenchmarkSample(
+                inputs,
+                client,
+                server,
+                encoder,
+                encrypted_input,
+                ElapsedMilliseconds(fixture_begin, fixture_end),
+                ElapsedMilliseconds(setup_begin, setup_end) +
+                    ElapsedMilliseconds(server_setup_begin, server_setup_end),
+                ElapsedMilliseconds(encrypt_begin, encrypt_end));
             return 0;
         }
         const std::size_t layer_count = EvaluatedLayerCount(arguments);

@@ -2,21 +2,22 @@
 
 ## OpenFHE CPU migration
 
-The default build is the staged OpenFHE v1.5.1 CPU migration. It includes the pushed M4
-server-only replay of layer 1 and an M5 gate that chains all 12 layers of the frozen
-five-token BERT-base encoder trace without plaintext activation resets. Each token uses
-one 1024-slot ciphertext inside the full 32768-slot CKKS ring capacity. The client owns
-the private key and decrypts gated checkpoints; the server receives only ciphertexts,
-public model weights, and an evaluation-key bundle. The only accepted parameter profile
-is `paper_compat`, which always reports `security_claim=none`. These research
-reproduction parameters do not support a 128-bit security claim. M5 is complete only
-after its full clean-commit ciphertext gate and fail-closed artifact validator pass;
-plaintext preflights and shortened diagnostics are not completion evidence. A reviewed
-two-layer live calibration supplied the original M5 schedule candidate. The approved
-exact-three live run has since validated the second handoff and later-layer regime and
-transitioned the profile to `sealed_exact3`. That shortened run remains
-`artifact_eligible=false` and satisfies only the schedule prerequisite; the formal live
-M4 regression and full 12-layer runnable-prototype gate remain required.
+The default build is the OpenFHE v1.5.1 CPU backend. It includes the pushed M4
+server-only replay of layer 1 and the completed M5 gate that chains all 12 layers of the
+frozen five-token BERT-base encoder trace without plaintext activation resets. Each
+token uses one 1024-slot ciphertext inside the full 32768-slot CKKS ring capacity. The
+client owns the private key; the server receives only ciphertexts, public model weights,
+and an evaluation-key bundle. The only accepted parameter profile is `paper_compat`,
+which always reports `security_claim=none`. These research-reproduction parameters do
+not support a 128-bit security claim.
+
+The approved M5 v6 artifact is
+`20260801T224242+0900-m5-runnable-prototype-v6-534f582-r27`, bound to pushed commit
+`534f582a655669bafee9d9098cb54efbf66d2cd5`. It passed the formal client-validated
+12-layer correctness gate at rel-L2 `0.0017283753946057928`, cosine
+`0.9999985073522254`, and inactive maximum `3.415363197201149e-06`. M6 adds a distinct
+benchmark contract; it does not promote the M5 single execution or shortened schedule
+diagnostics into timing evidence.
 
 Configure, build, and run the fast gates:
 
@@ -90,23 +91,18 @@ ctest --test-dir build-openfhe --output-on-failure \
 ```
 
 On the development host the full correctness gate uses roughly 31 GiB peak RSS and
-takes about 31 minutes. This is a correctness observation, not an M6 benchmark. The
-current depth-12 graph still needs a formal live M4 pass on the clean milestone source.
-The v5 code contract is aligned with the depth-12/post-inverse-cleanup counts, but is not
-current evidence until that gate passes, the milestone commit is pushed, and
-local/remote branch SHAs match. The intended runner is:
+takes about 31 minutes. This is a correctness observation, not an M6 benchmark. The M4
+live regression evidence is already part of the validated M5 prerequisite chain. Its
+runner is:
 
 ```bash
 /home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
   scripts/run_openfhe_encoder_artifact_v5.py
 ```
 
-The historical v2 contract remains byte-preserved. The v5 runner/schema/validator code
-contract is aligned with the current post-inverse-cleanup graph, but no new M4 artifact
-is claimed by code alignment alone. Any resulting M4 artifact establishes only the
-one-layer result; it does not by itself
-establish 12-layer ciphertext execution, task-level inference, or a speedup over the
-optional SEAL reference.
+The historical v2 contract remains byte-preserved. Any M4 artifact establishes only the
+one-layer result; it does not by itself establish 12-layer ciphertext execution,
+task-level inference, or a speedup over the optional SEAL reference.
 
 Both active artifact runners discard the ignored build-tree configuration with a fixed
 `/usr/bin/cmake --fresh` configure before their clean-first build. Configure, build,
@@ -178,23 +174,39 @@ ctest --test-dir build-openfhe --output-on-failure \
   -R '^openfhe_encoder_12_layer_smoke$'
 ```
 
-The exact-three schedule prerequisite is satisfied and bound to its approved live
-evidence. Only after the live M4 regression and formal 12-layer gate pass, the clean
-milestone commit is pushed, and local/live-remote SHAs match should one non-benchmark
-correctness execution be sealed with:
+The exact-three schedule prerequisite, live M4 regression, and formal 12-layer gate are
+satisfied and bound into the approved r27 evidence. The non-benchmark correctness runner
+is retained for reproducibility:
 
 ```bash
 /home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
   scripts/run_openfhe_encoder12_artifact_v6.py
 ```
 
-The M5 v6 runner/schema/validator code contract is aligned with the sealed schedule and
-prototype threshold, but it is not milestone evidence until the live M4 regression,
-full 12-layer validation, clean commit/push, and live-remote SHA verification all pass. It
-rehashes the executable and frozen inputs, requires the layer-1/level-29 M4 regression,
-requires 12 ordered layer records and 11 inter-layer refreshes, rejects diagnostic or
-calibration stdout, and delegates the sealed directory to the independent schema and
-semantic validator. M5 still excludes task-level inference and any SEAL speedup claim.
+The M5 v6 runner rehashes the executable and frozen inputs, requires the
+layer-1/level-29 M4 regression, requires 12 ordered layer records and 11 inter-layer
+refreshes, rejects diagnostic or calibration stdout, and delegates the sealed directory
+to the independent schema and semantic validator. M5 still excludes task-level
+inference and any SEAL speedup claim.
+
+M6 measures the same five-token, 12-layer OpenFHE workload with checkpoint observation
+disabled inside the server-online window. Every execution still performs a client-owned
+final decryption and correctness gate. The formal harness uses one discarded warm-up and
+five measured executions, reports median/MAD/minimum/maximum for phase and wall latency,
+reports batch and five-token amortized latency, records process high-water RSS, and
+counts OpenFHE BINARY archive component bytes for keys and ciphertexts. Size measurement
+is outside server-online timing and writes no key material:
+
+```bash
+/home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
+  scripts/run_openfhe_m6_benchmark.py
+```
+
+The full protocol is expected to take roughly 41 hours on the development host. The
+runner requires a clean pushed commit with matching local, tracking, and live-remote
+SHAs, and binds the approved M5 r27 artifact before any timing sample. Legacy SEAL uses a
+different parameter/packing/precision/workload contract, so it is recorded as
+non-comparable and no speedup is calculated.
 
 ## Optional legacy SEAL reference
 

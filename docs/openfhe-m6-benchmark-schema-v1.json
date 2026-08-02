@@ -1,0 +1,850 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.moai/openfhe-m6-benchmark-schema-v1.json",
+  "title": "MOAI OpenFHE M6 benchmark artifact v1",
+  "description": "Fail-closed five-token, 12-layer OpenFHE CKKS CPU benchmark evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "schema_binding",
+    "run_id",
+    "milestone",
+    "started_at",
+    "finished_at",
+    "git",
+    "m5_prerequisite",
+    "profile",
+    "build_configuration",
+    "workload",
+    "preflight",
+    "commands",
+    "environment",
+    "inputs",
+    "samples",
+    "metrics",
+    "comparison",
+    "gate",
+    "artifacts",
+    "claim_boundary",
+    "verdict"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "schema_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonicalization", "files"],
+      "properties": {
+        "canonicalization": {"const": "git-blob-and-working-tree-sha256-v1"},
+        "files": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {"$ref": "#/$defs/boundFile"}
+        }
+      }
+    },
+    "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+:-]{0,127}$"},
+    "milestone": {"const": "M6"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": "string", "format": "date-time"},
+    "git": {"$ref": "#/$defs/git"},
+    "m5_prerequisite": {"$ref": "#/$defs/m5Prerequisite"},
+    "profile": {"$ref": "#/$defs/profile"},
+    "build_configuration": {"$ref": "#/$defs/buildConfiguration"},
+    "workload": {"$ref": "#/$defs/workload"},
+    "preflight": {"$ref": "#/$defs/preflight"},
+    "commands": {
+      "type": "array",
+      "minItems": 18,
+      "maxItems": 18,
+      "items": {"$ref": "#/$defs/command"}
+    },
+    "environment": {"$ref": "#/$defs/environment"},
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/fileRecord"}
+    },
+    "samples": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["warmup", "measured"],
+      "properties": {
+        "warmup": {"$ref": "#/$defs/executedSample"},
+        "measured": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {"$ref": "#/$defs/executedSample"}
+        }
+      }
+    },
+    "metrics": {"$ref": "#/$defs/metrics"},
+    "comparison": {"$ref": "#/$defs/comparison"},
+    "gate": {"$ref": "#/$defs/gate"},
+    "artifacts": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "claim_boundary": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "verdict": {"const": "GO_M6_OPENFHE_BENCHMARK"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "gitSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "nonNegativeNumber": {"type": "number", "minimum": 0},
+    "positiveInteger": {"type": "integer", "minimum": 1},
+    "fileRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "boundFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes", "sha256", "git_blob_sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "git_blob_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_root",
+        "branch",
+        "local_commit",
+        "clean",
+        "tracking_ref",
+        "tracking_commit",
+        "remote_name",
+        "remote_url",
+        "remote_ref",
+        "remote_commit"
+      ],
+      "properties": {
+        "repository_root": {"const": "/home/shawnsheep/MOAI"},
+        "branch": {"const": "refactor/openfhe-cpu"},
+        "local_commit": {"$ref": "#/$defs/gitSha"},
+        "clean": {"const": true},
+        "tracking_ref": {"const": "refs/remotes/origin/refactor/openfhe-cpu"},
+        "tracking_commit": {"$ref": "#/$defs/gitSha"},
+        "remote_name": {"const": "origin"},
+        "remote_url": {"const": "https://github.com/shawn-sheep/MOAI.git"},
+        "remote_ref": {"const": "refs/heads/refactor/openfhe-cpu"},
+        "remote_commit": {"$ref": "#/$defs/gitSha"}
+      }
+    },
+    "m5Prerequisite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "relative_path",
+        "manifest_sha256",
+        "sha256sums_sha256",
+        "decision",
+        "verdict",
+        "validated"
+      ],
+      "properties": {
+        "run_id": {"const": "20260801T224242+0900-m5-runnable-prototype-v6-534f582-r27"},
+        "relative_path": {"const": "results/openfhe/20260801T224242+0900-m5-runnable-prototype-v6-534f582-r27"},
+        "manifest_sha256": {"const": "d77425290cb15f6265527f362f016ee51c277e3a8e89da74592b79c353b44d95"},
+        "sha256sums_sha256": {"const": "48abf4300188388499fff60dd2617a1009e546314537e320c4bb9c5cbb148fd8e"},
+        "decision": {"const": "PASS_M5_RUNNABLE_PROTOTYPE"},
+        "verdict": {"const": "GO_PROTOTYPE"},
+        "validated": {"const": true}
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "security_claim", "effective_profile_sha256", "warning"],
+      "properties": {
+        "id": {"const": "paper_compat"},
+        "security_claim": {"const": "none"},
+        "effective_profile_sha256": {"const": "94f30e628e21f02146ce7ed9820194eabba3820f6e1e17176a31f8c5acf8b0be"},
+        "warning": {"const": "Research reproduction parameters only. Do not claim 128-bit security."}
+      }
+    },
+    "provenanceFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "bytes", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "linkedLibrary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["soname", "path", "bytes", "sha256"],
+      "properties": {
+        "soname": {
+          "enum": [
+            "libOPENFHEbinfhe.so.1",
+            "libOPENFHEcore.so.1",
+            "libOPENFHEpke.so.1"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/home/shawnsheep/opt/openfhe_v1_5_1/lib/libOPENFHE(binfhe|core|pke)\\.so\\.1\\.5\\.1$"
+        },
+        "bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "buildConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generator",
+        "source_root",
+        "build_root",
+        "openfhe_dir",
+        "build_type",
+        "build_testing",
+        "cxx_compiler",
+        "make_program",
+        "cxx_flags",
+        "cxx_flags_release",
+        "exe_linker_flags",
+        "exe_linker_flags_release",
+        "shared_linker_flags",
+        "module_linker_flags",
+        "static_linker_flags",
+        "environment_inheritance",
+        "cleared_environment_variables",
+        "forced_environment_variables",
+        "cmake_cache",
+        "openfhe_cmake_package_files",
+        "openfhe_include_tree",
+        "openfhe_linked_libraries"
+      ],
+      "properties": {
+        "generator": {"const": "Unix Makefiles"},
+        "source_root": {"const": "/home/shawnsheep/MOAI"},
+        "build_root": {"const": "/home/shawnsheep/MOAI/build-openfhe"},
+        "openfhe_dir": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1/lib/OpenFHE"},
+        "build_type": {"const": "Release"},
+        "build_testing": {"const": true},
+        "cxx_compiler": {"const": "/usr/bin/c++"},
+        "make_program": {"const": "/usr/bin/gmake"},
+        "cxx_flags": {"const": ""},
+        "cxx_flags_release": {"const": "-O3 -DNDEBUG"},
+        "exe_linker_flags": {"const": ""},
+        "exe_linker_flags_release": {"const": ""},
+        "shared_linker_flags": {"const": ""},
+        "module_linker_flags": {"const": ""},
+        "static_linker_flags": {"const": ""},
+        "environment_inheritance": {"const": "ambient_minus_cleared_variables"},
+        "cleared_environment_variables": {
+          "type": "array",
+          "minItems": 33,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "forced_environment_variables": {
+          "const": {
+            "LANG": "C",
+            "LC_ALL": "C",
+            "OMP_NUM_THREADS": "16",
+            "OMP_DYNAMIC": "FALSE"
+          }
+        },
+        "cmake_cache": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "bytes", "sha256"],
+          "properties": {
+            "path": {"const": "build-openfhe/CMakeCache.txt"},
+            "bytes": {"type": "integer", "minimum": 1},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "openfhe_cmake_package_files": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {"$ref": "#/$defs/provenanceFile"}
+        },
+        "openfhe_include_tree": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["root", "file_count", "bytes", "algorithm", "canonicalization", "sha256"],
+          "properties": {
+            "root": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1/include/openfhe"},
+            "file_count": {"type": "integer", "minimum": 1},
+            "bytes": {"type": "integer", "minimum": 1},
+            "algorithm": {"const": "SHA-256"},
+            "canonicalization": {"const": "relative-posix-path-nul-size-nul-sha256-newline-v1"},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "openfhe_linked_libraries": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/linkedLibrary"}
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "architecture",
+        "cmake",
+        "compiler",
+        "openfhe_prefix",
+        "openfhe_version",
+        "os",
+        "python",
+        "wsl",
+        "logical_cpu_count",
+        "threading"
+      ],
+      "properties": {
+        "architecture": {"type": "string", "minLength": 1},
+        "cmake": {"type": "string", "minLength": 1},
+        "compiler": {"type": "string", "minLength": 1},
+        "openfhe_prefix": {"const": "/home/shawnsheep/opt/openfhe_v1_5_1"},
+        "openfhe_version": {"const": "1.5.1"},
+        "os": {"type": "string", "minLength": 1},
+        "python": {"type": "string", "minLength": 1},
+        "wsl": {"const": true},
+        "logical_cpu_count": {"const": 16},
+        "threading": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["forced", "cleared_inherited_variables", "applies_to"],
+          "properties": {
+            "forced": {
+              "const": {"OMP_NUM_THREADS": "16", "OMP_DYNAMIC": "FALSE"}
+            },
+            "cleared_inherited_variables": {
+              "type": "array",
+              "minItems": 33,
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            },
+            "applies_to": {
+              "const": "configure, build, CTest, warm-up, measured samples, validator"
+            }
+          }
+        }
+      }
+    },
+    "schedulePreflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "test",
+        "profile",
+        "security_claim",
+        "encoder_layers",
+        "layer_ids",
+        "chain_mode",
+        "expected_fixture_files",
+        "metadata_schedule_preflight",
+        "formal_metadata_schedule_source",
+        "formal_schedule_sealed",
+        "he_metadata_verified_by_preflight",
+        "trace_hash_gate",
+        "finite_and_in_range",
+        "final_relative_l2",
+        "final_cosine",
+        "final_max_absolute",
+        "load_and_oracle_ms"
+      ],
+      "properties": {
+        "test": {"const": "openfhe_encoder_12_layer_preflight"},
+        "profile": {"const": "paper_compat"},
+        "security_claim": {"const": "none"},
+        "encoder_layers": {"const": 12},
+        "layer_ids": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 0, "maximum": 11}
+        },
+        "chain_mode": {"const": "plaintext_output_to_next_oracle_input"},
+        "expected_fixture_files": {"const": 444},
+        "metadata_schedule_preflight": {"const": "synthetic_structure_only"},
+        "formal_metadata_schedule_source": {"const": "two_layer_live_candidate_requires_exact_three"},
+        "formal_schedule_sealed": {"const": false},
+        "he_metadata_verified_by_preflight": {"const": false},
+        "trace_hash_gate": {"const": "separate_fail_closed_validator_required"},
+        "finite_and_in_range": {"const": true},
+        "final_relative_l2": {"type": "number", "minimum": 0, "maximum": 0.05},
+        "final_cosine": {"type": "number", "minimum": 0.99, "maximum": 1.000000000001},
+        "final_max_absolute": {"type": "number", "minimum": 0},
+        "load_and_oracle_ms": {"type": "number", "minimum": 0}
+      }
+    },
+    "cryptoPreflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "test",
+        "profile",
+        "security_claim",
+        "input_metadata",
+        "server_private_key_present",
+        "server_decryptions",
+        "server_plaintext_activations",
+        "additive_he_operations",
+        "passed"
+      ],
+      "properties": {
+        "test": {"const": "openfhe_encoder_12_layer_crypto_preflight"},
+        "profile": {"const": "paper_compat"},
+        "security_claim": {"const": "none"},
+        "input_metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level", "noise_scale_degree", "remaining_levels", "scale_bits", "expected_scale_bits", "ciphertext_count"],
+          "properties": {
+            "level": {"const": 29},
+            "noise_scale_degree": {"const": 1},
+            "remaining_levels": {"const": 18},
+            "scale_bits": {"type": "number", "minimum": 49.999, "maximum": 50.001},
+            "expected_scale_bits": {"const": 50},
+            "ciphertext_count": {"const": 5}
+          }
+        },
+        "server_private_key_present": {"const": false},
+        "server_decryptions": {"const": 0},
+        "server_plaintext_activations": {"const": false},
+        "additive_he_operations": {"const": 0},
+        "passed": {"const": true}
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend",
+        "scope",
+        "executable_path",
+        "executable_sha256",
+        "executable_bytes",
+        "warmup_count",
+        "measured_count",
+        "independent_processes",
+        "token_count",
+        "encoder_layers",
+        "timing_kind"
+      ],
+      "properties": {
+        "backend": {"const": "OpenFHE CKKS CPU"},
+        "scope": {"const": "server-only five-token BERT-base 12-layer encoder trace replay"},
+        "executable_path": {"const": "build-openfhe/openfhe_encoder_12_layer_smoke"},
+        "executable_sha256": {"$ref": "#/$defs/sha256"},
+        "executable_bytes": {"$ref": "#/$defs/positiveInteger"},
+        "warmup_count": {"const": 1},
+        "measured_count": {"const": 5},
+        "independent_processes": {"const": true},
+        "token_count": {"const": 5},
+        "encoder_layers": {"const": 12},
+        "timing_kind": {"const": "benchmark"}
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fresh_configure",
+        "clean_build",
+        "narrow_ctest",
+        "passed_tests",
+        "schedule_preflight",
+        "crypto_preflight"
+      ],
+      "properties": {
+        "fresh_configure": {"const": true},
+        "clean_build": {"const": true},
+        "narrow_ctest": {"const": true},
+        "passed_tests": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "schedule_preflight": {"$ref": "#/$defs/schedulePreflight"},
+        "crypto_preflight": {"$ref": "#/$defs/cryptoPreflight"}
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "cwd", "returncode"],
+      "properties": {
+        "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "cwd": {"const": "/home/shawnsheep/MOAI"},
+        "returncode": {"const": 0},
+        "started_at": {"type": "string", "format": "date-time"},
+        "finished_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture_load_oracle",
+        "setup_keygen",
+        "client_encrypt",
+        "server_online",
+        "client_decrypt",
+        "client_validate",
+        "serialized_size_measurement",
+        "online_batch",
+        "online_batch_amortized_per_token",
+        "end_to_end_batch",
+        "end_to_end_amortized_per_token",
+        "server_online_amortized_per_token"
+      ],
+      "properties": {
+        "fixture_load_oracle": {"$ref": "#/$defs/nonNegativeNumber"},
+        "setup_keygen": {"$ref": "#/$defs/nonNegativeNumber"},
+        "client_encrypt": {"$ref": "#/$defs/nonNegativeNumber"},
+        "server_online": {"$ref": "#/$defs/nonNegativeNumber"},
+        "client_decrypt": {"$ref": "#/$defs/nonNegativeNumber"},
+        "client_validate": {"$ref": "#/$defs/nonNegativeNumber"},
+        "serialized_size_measurement": {"$ref": "#/$defs/nonNegativeNumber"},
+        "online_batch": {"$ref": "#/$defs/nonNegativeNumber"},
+        "online_batch_amortized_per_token": {"$ref": "#/$defs/nonNegativeNumber"},
+        "end_to_end_batch": {"$ref": "#/$defs/nonNegativeNumber"},
+        "end_to_end_amortized_per_token": {"$ref": "#/$defs/nonNegativeNumber"},
+        "server_online_amortized_per_token": {"$ref": "#/$defs/nonNegativeNumber"}
+      }
+    },
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_l2", "cosine", "max_absolute", "inactive_max_abs", "finite", "passed"],
+      "properties": {
+        "relative_l2": {"type": "number", "minimum": 0, "maximum": 0.05},
+        "cosine": {"type": "number", "minimum": 0.99, "maximum": 1},
+        "max_absolute": {"$ref": "#/$defs/nonNegativeNumber"},
+        "inactive_max_abs": {"type": "number", "minimum": 0, "maximum": 0.001},
+        "finite": {"const": true},
+        "passed": {"const": true}
+      }
+    },
+    "keySizes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "serialization_format",
+        "context_bytes",
+        "public_key_bytes",
+        "private_key_bytes",
+        "evaluation_multiplication_key_bytes",
+        "evaluation_automorphism_key_bytes",
+        "server_key_bundle_component_sum_bytes"
+      ],
+      "properties": {
+        "serialization_format": {"const": "openfhe_binary_archive_component_sum_v1"},
+        "context_bytes": {"$ref": "#/$defs/positiveInteger"},
+        "public_key_bytes": {"$ref": "#/$defs/positiveInteger"},
+        "private_key_bytes": {"$ref": "#/$defs/positiveInteger"},
+        "evaluation_multiplication_key_bytes": {"$ref": "#/$defs/positiveInteger"},
+        "evaluation_automorphism_key_bytes": {"$ref": "#/$defs/positiveInteger"},
+        "server_key_bundle_component_sum_bytes": {"$ref": "#/$defs/positiveInteger"}
+      }
+    },
+    "cipherSizes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serialization_format", "ciphertext_count", "ciphertext_component_sum_bytes"],
+      "properties": {
+        "serialization_format": {"const": "openfhe_binary_archive_component_sum_v1"},
+        "ciphertext_count": {"const": 5},
+        "ciphertext_component_sum_bytes": {"$ref": "#/$defs/positiveInteger"}
+      }
+    },
+    "serializedSizes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keys", "encrypted_input", "final_output"],
+      "properties": {
+        "keys": {"$ref": "#/$defs/keySizes"},
+        "encrypted_input": {"$ref": "#/$defs/cipherSizes"},
+        "final_output": {"$ref": "#/$defs/cipherSizes"}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rotations",
+        "ct_pt_multiplications",
+        "ct_ct_multiplications",
+        "explicit_rescale_requests",
+        "chebyshev_evaluations",
+        "estimated_polynomial_multiplications",
+        "bootstraps",
+        "bootstrap_iterations"
+      ],
+      "properties": {
+        "rotations": {"const": 75600},
+        "ct_pt_multiplications": {"const": 622675},
+        "ct_ct_multiplications": {"const": 1140},
+        "explicit_rescale_requests": {"const": 9775},
+        "chebyshev_evaluations": {"const": 660},
+        "estimated_polynomial_multiplications": {"const": 13800},
+        "bootstraps": {"const": 355},
+        "bootstrap_iterations": {"const": 710}
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "noise_scale_degree", "remaining_levels", "scale_bits", "expected_scale_bits", "ciphertext_count"],
+      "properties": {
+        "level": {"const": 30},
+        "noise_scale_degree": {"const": 2},
+        "remaining_levels": {"const": 16},
+        "scale_bits": {"type": "number", "minimum": 99.99, "maximum": 100.01},
+        "expected_scale_bits": {"const": 100},
+        "ciphertext_count": {"const": 5}
+      }
+    },
+    "benchmarkSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "test",
+        "profile",
+        "security_claim",
+        "parameter_sha256",
+        "backend",
+        "benchmark_sample",
+        "timing_claim",
+        "latency_kind",
+        "execution_mode",
+        "claim_scope",
+        "encoder_layers",
+        "token_count",
+        "chain_mode",
+        "client_encrypt_calls",
+        "plaintext_activation_resets",
+        "server_layer_evaluations",
+        "inter_layer_refreshes",
+        "checkpoint_decryption_owner",
+        "observer_present_during_server_online",
+        "checkpoint_decryptions",
+        "final_decryption_owner",
+        "server_private_key_present",
+        "server_decryptions",
+        "server_plaintext_activations",
+        "approximation_range_status",
+        "timing_ms",
+        "correctness",
+        "serialized_sizes",
+        "final_metadata",
+        "operation_counts",
+        "multiplicative_depth",
+        "max_observed_level",
+        "max_polynomial_depth",
+        "peak_rss_bytes",
+        "peak_rss_scope",
+        "passed"
+      ],
+      "properties": {
+        "test": {"const": "openfhe_encoder_12_layer_benchmark_sample"},
+        "profile": {"const": "paper_compat"},
+        "security_claim": {"const": "none"},
+        "parameter_sha256": {"const": "94f30e628e21f02146ce7ed9820194eabba3820f6e1e17176a31f8c5acf8b0be"},
+        "backend": {"const": "OpenFHE CKKS CPU"},
+        "benchmark_sample": {"const": true},
+        "timing_claim": {"const": true},
+        "latency_kind": {"const": "benchmark"},
+        "execution_mode": {"const": "server-only"},
+        "claim_scope": {"const": "m6_12_layer_benchmark_sample"},
+        "encoder_layers": {"const": 12},
+        "token_count": {"const": 5},
+        "chain_mode": {"const": "ciphertext_output_to_next_input"},
+        "client_encrypt_calls": {"const": 1},
+        "plaintext_activation_resets": {"const": 0},
+        "server_layer_evaluations": {"const": 12},
+        "inter_layer_refreshes": {"const": 11},
+        "checkpoint_decryption_owner": {"const": "client"},
+        "observer_present_during_server_online": {"const": false},
+        "checkpoint_decryptions": {"const": 0},
+        "final_decryption_owner": {"const": "client"},
+        "server_private_key_present": {"const": false},
+        "server_decryptions": {"const": 0},
+        "server_plaintext_activations": {"const": false},
+        "approximation_range_status": {"const": "prevalidated_by_bound_m5_artifact_not_observed_in_sample"},
+        "timing_ms": {"$ref": "#/$defs/timing"},
+        "correctness": {"$ref": "#/$defs/correctness"},
+        "serialized_sizes": {"$ref": "#/$defs/serializedSizes"},
+        "final_metadata": {"$ref": "#/$defs/metadata"},
+        "operation_counts": {"$ref": "#/$defs/counts"},
+        "multiplicative_depth": {"const": 47},
+        "max_observed_level": {"const": 45},
+        "max_polynomial_depth": {"const": 10},
+        "peak_rss_bytes": {"$ref": "#/$defs/positiveInteger"},
+        "peak_rss_scope": {"const": "process_high_water_mark"},
+        "passed": {"const": true}
+      }
+    },
+    "executedSample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "index", "sample", "external_wall_seconds", "external_peak_rss_bytes"],
+      "properties": {
+        "phase": {"enum": ["warmup", "measured"]},
+        "index": {"type": "integer", "minimum": 0, "maximum": 5},
+        "sample": {"$ref": "#/$defs/benchmarkSample"},
+        "external_wall_seconds": {"$ref": "#/$defs/nonNegativeNumber"},
+        "external_peak_rss_bytes": {"$ref": "#/$defs/positiveInteger"}
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["samples", "median", "mad", "minimum", "maximum"],
+      "properties": {
+        "samples": {"type": "array", "minItems": 5, "maxItems": 5, "items": {"$ref": "#/$defs/nonNegativeNumber"}},
+        "median": {"$ref": "#/$defs/nonNegativeNumber"},
+        "mad": {"$ref": "#/$defs/nonNegativeNumber"},
+        "minimum": {"$ref": "#/$defs/nonNegativeNumber"},
+        "maximum": {"$ref": "#/$defs/nonNegativeNumber"}
+      }
+    },
+    "timingSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["batch", "amortized_per_token"],
+      "properties": {
+        "batch": {"$ref": "#/$defs/summary"},
+        "amortized_per_token": {"$ref": "#/$defs/summary"}
+      }
+    },
+    "qualitySeries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_l2", "cosine", "max_absolute", "inactive_max_abs", "all_finite", "all_passed"],
+      "properties": {
+        "relative_l2": {"$ref": "#/$defs/summary"},
+        "cosine": {"$ref": "#/$defs/summary"},
+        "max_absolute": {"$ref": "#/$defs/summary"},
+        "inactive_max_abs": {"$ref": "#/$defs/summary"},
+        "all_finite": {"const": true},
+        "all_passed": {"const": true}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["measured_count", "token_count", "timing_ms", "external_wall_seconds", "peak_rss_bytes", "serialized_sizes", "operation_counts", "correctness"],
+      "properties": {
+        "measured_count": {"const": 5},
+        "token_count": {"const": 5},
+        "timing_ms": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fixture_load_oracle", "setup_keygen", "client_encrypt", "server_online", "client_decrypt", "client_validate", "serialized_size_measurement", "online_batch", "end_to_end_batch"],
+          "properties": {
+            "fixture_load_oracle": {"$ref": "#/$defs/timingSummary"},
+            "setup_keygen": {"$ref": "#/$defs/timingSummary"},
+            "client_encrypt": {"$ref": "#/$defs/timingSummary"},
+            "server_online": {"$ref": "#/$defs/timingSummary"},
+            "client_decrypt": {"$ref": "#/$defs/timingSummary"},
+            "client_validate": {"$ref": "#/$defs/timingSummary"},
+            "serialized_size_measurement": {"$ref": "#/$defs/timingSummary"},
+            "online_batch": {"$ref": "#/$defs/timingSummary"},
+            "end_to_end_batch": {"$ref": "#/$defs/timingSummary"}
+          }
+        },
+        "external_wall_seconds": {"$ref": "#/$defs/timingSummary"},
+        "peak_rss_bytes": {"$ref": "#/$defs/summary"},
+        "serialized_sizes": {"$ref": "#/$defs/serializedSizes"},
+        "operation_counts": {"$ref": "#/$defs/counts"},
+        "correctness": {"$ref": "#/$defs/qualitySeries"}
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seal_reference"],
+      "properties": {
+        "seal_reference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "comparability", "reason", "speedup"],
+          "properties": {
+            "status": {"const": "not_run"},
+            "comparability": {"const": "noncomparable"},
+            "reason": {"const": "No fixed-parameter, fixed-packing, fixed-precision SEAL benchmark was run."},
+            "speedup": {"const": null}
+          }
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["passed", "decision", "checks"],
+      "properties": {
+        "passed": {"const": true},
+        "decision": {"const": "PASS_M6_OPENFHE_BENCHMARK"},
+        "checks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["git", "m5_prerequisite", "build", "narrow_ctest", "repeat_contract", "correctness", "bytes_and_counts", "statistics", "artifact_integrity", "seal_comparability"],
+          "properties": {
+            "git": {"const": "PASS"},
+            "m5_prerequisite": {"const": "PASS"},
+            "build": {"const": "PASS"},
+            "narrow_ctest": {"const": "PASS"},
+            "repeat_contract": {"const": "PASS"},
+            "correctness": {"const": "PASS"},
+            "bytes_and_counts": {"const": "PASS"},
+            "statistics": {"const": "PASS"},
+            "artifact_integrity": {"const": "PASS"},
+            "seal_comparability": {"const": "PASS_NONCOMPARABLE"}
+          }
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role", "media_type", "bytes", "sha256"],
+      "properties": {
+        "path": {"enum": ["stdout.log", "stderr.log", "time.log", "metrics.csv", "SHA256SUMS"]},
+        "role": {"enum": ["stdout", "stderr", "resource_timing", "metrics", "checksum"]},
+        "media_type": {"enum": ["text/plain", "text/csv"]},
+        "bytes": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

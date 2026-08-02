@@ -66,6 +66,44 @@ engineering bound that is stricter than legacy observability. It must be labelle
 `prototype_only` and `MOAI-observability-compatible`; it is not a claim that legacy MOAI used
 `1e-3`, and it does not establish strict SEAL/OpenFHE numerical parity.
 
+## M6 benchmark contract (2026-08-02)
+
+M6 does not reinterpret the single M5 correctness execution as a benchmark.  It first
+binds the approved M5 v6 runnable-prototype artifact by its fixed manifest and
+`SHA256SUMS` hashes and rechecks the required decision, verdict, and artifact contents.
+It then runs one discarded warm-up followed by exactly five measured 12-layer
+executions.  A failed or rejected sample fails the complete run; it may not be replaced
+with a more favourable sample.  The M5 bundle's original full validation remains bound
+to its M5 commit; M6 does not claim to reconstruct that historical build tree.
+
+Before the server-online timer starts, setup explicitly completes OpenFHE bootstrap
+precomputation.  The server-online timing window then calls the 12-layer encoder with no
+ciphertext observer.  It therefore contains neither one-time bootstrap preparation nor
+checkpoint cloning or client checkpoint decryption.  Every warm-up and measured
+execution still ends with one client-owned final decryption and the frozen M5 final
+rel-L2, cosine, finite-value, metadata, operation-count, depth, and inactive-tail gates.
+Correctness validation and serialized-size measurement remain outside the server-online
+timing window.
+
+For setup/key generation (including bootstrap preparation), client encryption, server
+online, client final decryption, online batch latency, setup-inclusive pipeline latency,
+and external process wall time, the artifact records all five
+measured samples and reports median, median absolute deviation, minimum, and maximum.
+Both batch latencies and their five-token amortized values are reported.  Peak RSS is the
+whole process high-water mark, not server-only resident memory.
+
+Key and ciphertext byte counts use independent OpenFHE 1.5.1 BINARY archives with the
+frozen label `openfhe_binary_archive_component_sum_v1`.  The server-key figure is the
+checked component sum of context, public key, multiplication evaluation keys, and
+automorphism evaluation keys; it excludes the private key.  The client private-key byte
+count is reported as a number only.  CipherTensor figures sum independent ciphertext
+archives and exclude packing metadata.  These component sums are not a network wire
+format and no key archive is written to the artifact.
+
+The legacy SEAL program remains an opt-in source/reference path.  Its parameters,
+packing, precision, workload composition, and validation protocol do not match the M6
+OpenFHE benchmark, so M6 records it as non-comparable and computes no speedup.
+
 ## Evidence boundary at M0
 
 The repository contains source entrypoints for basic CKKS, packing, linear operators, a

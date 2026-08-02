@@ -333,18 +333,19 @@ sealing diagnostic because it validates the second handoff and the later steady-
 regime. Exact one and exact two always report `formal_schedule_sealed=false`; exact three
 may report true only in its successful final summary. The approved exact-three run above
 has passed and is bound by the profile. The live M4 regression and formal 12-layer
-prototype CTest remain independent required gates.
+prototype CTest subsequently passed as independent gates in the approved M5 v6 r27
+evidence.
 
 ```bash
 ctest --test-dir build-openfhe --output-on-failure \
   -R '^openfhe_encoder_3_layer_exact_smoke$'
 ```
 
-The v6 runner/schema/validator code contract is aligned with the sealed tuple/counts,
-the exact-three evidence binding, and the M5 prototype threshold. The exact-three
-prerequisite is satisfied; M5 still lacks milestone evidence until live M4 and full
-12-layer prototype validation pass, the milestone commit is pushed, and the local,
-tracking, and live remote SHAs agree. The M5 entry point is:
+The v6 runner/schema/validator contract is aligned with the sealed tuple/counts, the
+exact-three evidence binding, and the M5 prototype threshold. M5 is complete at pushed
+commit `534f582a655669bafee9d9098cb54efbf66d2cd5`; the approved evidence directory is
+`20260801T224242+0900-m5-runnable-prototype-v6-534f582-r27`. The retained M5 entry point
+is:
 
 ```bash
 /home/shawnsheep/miniconda3/envs/fhe-inference/bin/python3.10 \
@@ -354,9 +355,7 @@ tracking, and live remote SHAs agree. The M5 entry point is:
 The versioned v6 M5 runner performs one untimed-claim prototype execution, binds all
 frozen inputs plus the executable by SHA-256 before and after the run, requires 12
 position-specific metadata/count records, and invokes the independent schema and
-semantic validator. Those artifact-side contracts are aligned, but no passing
-full12-plus-validator milestone artifact has yet been produced. The M4 intermediate
-gates must still pass before the full ciphertext chain starts; the 12-layer output gate
-is not a substitute for that regression. The runner must emit `timing_claim=false`. A shortened diagnostic,
-calibration run, dirty-tree run, remote-SHA mismatch, input or binary hash drift, or any
-threshold/schema failure is not M5 evidence.
+semantic validator. The runner emits `timing_claim=false`; M6 therefore uses a separate
+benchmark contract and does not reinterpret r27 latency as benchmark evidence. A
+shortened diagnostic, calibration run, dirty-tree run, remote-SHA mismatch, input or
+binary hash drift, or any threshold/schema failure is not M5 evidence.
